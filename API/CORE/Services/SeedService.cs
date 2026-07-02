@@ -2,19 +2,19 @@ using API.CORE.Schemas;
 using API.DATABASE;
 using API.DATABASE.Entities;
 using Microsoft.EntityFrameworkCore;
-using Stimulsoft.Base.Drawing;
 using Stimulsoft.Report;
-using Stimulsoft.Report.Components;
 
 namespace API.CORE.Services
 {
     /// <summary>
-    /// Cree au demarrage un modele global (seed) par type de document s'il n'existe pas encore.
-    /// Les seeds V1 sont generes par code (page + titre + dictionnaire synchronise sur les donnees exemples) ;
-    /// ils seront remplaces par les 7 .mrt recrees fidelement depuis les etalons pdfmake (PR 2.1).
+    /// Cree au demarrage les 7 modeles globaux (seeds) par type de document — repliques V1
+    /// des 7 modeles pdfmake historiques (voir SeedTemplateFactory). La parite fine avec
+    /// les etalons pdfmake sera peaufinee dans le designer (PR 2.1).
     /// </summary>
     public class SeedService
     {
+        public const int ModelCount = 7;
+
         private static readonly Dictionary<string, string> Labels = new()
         {
             [DocTypes.Quote] = "Devis",
@@ -43,41 +43,58 @@ namespace API.CORE.Services
         {
             foreach (var docType in DocTypes.All)
             {
-                var exists = await _db.ReportTemplates.AnyAsync(t => t.SocieteId == null && t.DocType == docType);
-                if (exists) continue;
+                var existing = await _db.ReportTemplates
+                    .Where(t => t.SocieteId == null && t.DocType == docType)
+                    .Select(t => t.Name)
+                    .ToListAsync();
 
-                var template = new ReportTemplate
+                var sampleJson = await _sampleData.GetSampleDataAsync(docType);
+
+                for (var model = 1; model <= ModelCount; model++)
                 {
-                    SocieteId = null,
-                    DocType = docType,
-                    Name = $"Modele standard — {Labels[docType]}",
-                    IsDefault = false
-                };
-                template.FilePath = _storage.BuildRelativePath(null, docType, template.Id, template.Version);
+                    var name = $"Modele {model}";
+                    if (existing.Contains(name)) continue;
 
-                var mrt = await BuildSeedMrtAsync(docType);
-                await _storage.WriteAsync(template.FilePath, mrt);
+                    var template = new ReportTemplate
+                    {
+                        SocieteId = null,
+                        DocType = docType,
+                        Name = name,
+                        IsDefault = false
+                    };
+                    template.FilePath = _storage.BuildRelativePath(null, docType, template.Id, template.Version);
 
-                _db.ReportTemplates.Add(template);
-                _db.ReportTemplateVersions.Add(new ReportTemplateVersion
-                {
-                    TemplateId = template.Id,
-                    Version = template.Version,
-                    FilePath = template.FilePath
-                });
+                    var report = SeedTemplateFactory.Build(model, docType, Labels[docType], sampleJson);
+                    await _storage.WriteAsync(template.FilePath, report.SaveToString());
 
-                _logger.LogInformation("Seed cree pour {DocType} : {Path}", docType, template.FilePath);
+                    _db.ReportTemplates.Add(template);
+                    _db.ReportTemplateVersions.Add(new ReportTemplateVersion
+                    {
+                        TemplateId = template.Id,
+                        Version = template.Version,
+                        FilePath = template.FilePath
+                    });
+
+                    _logger.LogInformation("Seed cree : {DocType} / {Name} -> {Path}", docType, name, template.FilePath);
+                }
             }
 
             await _db.SaveChangesAsync();
         }
 
+        /// <summary>Contenu .mrt de depart pour la creation d'un modele societe ("from": "seed") — Modele 1 du docType.</summary>
         public async Task<string> GetSeedMrtContentAsync(string docType)
         {
-            var seed = await _db.ReportTemplates.FirstOrDefaultAsync(t => t.SocieteId == null && t.DocType == docType);
+            var seed = await _db.ReportTemplates
+                .Where(t => t.SocieteId == null && t.DocType == docType)
+                .OrderBy(t => t.Name)
+                .FirstOrDefaultAsync();
+
             if (seed != null && _storage.Exists(seed.FilePath))
                 return await _storage.ReadAsync(seed.FilePath);
-            return await BuildSeedMrtAsync(docType);
+
+            var report = SeedTemplateFactory.Build(1, docType, Labels[docType], await _sampleData.GetSampleDataAsync(docType));
+            return report.SaveToString();
         }
 
         public async Task<string> BuildBlankMrtAsync(string docType)
@@ -85,36 +102,6 @@ namespace API.CORE.Services
             var report = StiReport.CreateNewReport();
             report.ReportName = $"{Labels[docType]} — vierge";
             RenderService.RegisterData(report, await _sampleData.GetSampleDataAsync(docType));
-            return report.SaveToString();
-        }
-
-        private async Task<string> BuildSeedMrtAsync(string docType)
-        {
-            var report = StiReport.CreateNewReport();
-            report.ReportName = $"{Labels[docType]} — modele standard";
-
-            var page = report.Pages[0];
-
-            var title = new StiText(new RectangleD(0, 0.5, page.Width, 1.2))
-            {
-                Name = "TitreDocument",
-                HorAlignment = StiTextHorAlignment.Center
-            };
-            title.Text.Value = Labels[docType].ToUpperInvariant();
-            page.Components.Add(title);
-
-            var hint = new StiText(new RectangleD(0, 2.0, page.Width, 0.8))
-            {
-                Name = "AideConception",
-                HorAlignment = StiTextHorAlignment.Center
-            };
-            hint.Text.Value = "Modele de depart — utilisez le dictionnaire de donnees (document, societe, options) pour placer vos champs.";
-            page.Components.Add(hint);
-
-            // Le dictionnaire est synchronise sur les donnees exemples : l'utilisateur voit
-            // les champs disponibles (document, societe, options) dans le designer.
-            RenderService.RegisterData(report, await _sampleData.GetSampleDataAsync(docType));
-
             return report.SaveToString();
         }
     }
