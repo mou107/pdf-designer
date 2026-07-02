@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axiobat/pdf-designer/schemas/BonLivraison/v1",
+  "title": "PdfRenderPayload data — BonLivraison",
+  "description": "Schema v1 des donnees de rendu pour BonLivraison. Source de verite du dictionnaire des templates .mrt et des mappers web/mobile.",
+  "type": "object",
+  "required": [
+    "document",
+    "societe"
+  ],
+  "properties": {
+    "document": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "type": "string"
+        },
+        "titre": {
+          "type": "string"
+        },
+        "sousTitre": {
+          "type": "string"
+        },
+        "objet": {
+          "type": "string"
+        },
+        "dateCreation": {
+          "type": "string"
+        },
+        "dateValidite": {
+          "type": "string"
+        },
+        "statut": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "civilite": {
+              "type": "string"
+            },
+            "nom": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "telephone": {
+              "type": "string"
+            },
+            "siret": {
+              "type": "string"
+            },
+            "adresseFacturation": {
+              "type": "object",
+              "properties": {
+                "rue": {
+                  "type": "string"
+                },
+                "codePostal": {
+                  "type": "string"
+                },
+                "ville": {
+                  "type": "string"
+                },
+                "pays": {
+                  "type": "string"
+                }
+              }
+            },
+            "adresseChantier": {
+              "type": "object",
+              "properties": {
+                "rue": {
+                  "type": "string"
+                },
+                "codePostal": {
+                  "type": "string"
+                },
+                "ville": {
+                  "type": "string"
+                },
+                "pays": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "lignes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "numero": {
+                "type": "string"
+              },
+              "designation": {
+                "type": "string"
+              },
+              "unite": {
+                "type": "string"
+              },
+              "quantiteCommandee": {
+                "type": "number"
+              },
+              "quantiteLivree": {
+                "type": "number"
+              },
+              "quantiteRestante": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "societe": {
+      "type": "object",
+      "properties": {
+        "nom": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "telephone": {
+          "type": "string"
+        },
+        "siteWeb": {
+          "type": "string"
+        },
+        "siret": {
+          "type": "string"
+        },
+        "tvaIntracommunautaire": {
+          "type": "string"
+        },
+        "capital": {
+          "type": "string"
+        },
+        "adresse": {
+          "type": "object",
+          "properties": {
+            "rue": {
+              "type": "string"
+            },
+            "codePostal": {
+              "type": "string"
+            },
+            "ville": {
+              "type": "string"
+            },
+            "pays": {
+              "type": "string"
+            }
+          }
+        },
+        "mentionsLegales": {
+          "type": "string"
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "titreDocument": {
+          "type": "string"
+        },
+        "sousTitreDocument": {
+          "type": "string"
+        },
+        "masquerPrix": {
+          "type": "boolean"
+        },
+        "lienStripe": {
+          "type": "string"
+        },
+        "zoneSignature": {
+          "type": "boolean"
+        },
+        "mentionsSpecifiques": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

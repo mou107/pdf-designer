@@ -1,0 +1,89 @@
+{
+  "document": {
+    "reference": "BL-2026-00071",
+    "titre": "Bon de livraison",
+    "sousTitre": "Renovation salle de bain",
+    "objet": "Renovation complete de la salle de bain — remplacement sanitaire et carrelage",
+    "dateCreation": "2026-07-02",
+    "dateValidite": "2026-08-02",
+    "statut": "Brouillon",
+    "notes": "Acompte de 30% a la commande. Delai d'execution : 3 semaines.",
+    "client": {
+      "civilite": "M.",
+      "nom": "DUPONT Jean",
+      "email": "jean.dupont@example.com",
+      "telephone": "06 12 34 56 78",
+      "siret": "123 456 789 00012",
+      "adresseFacturation": {
+        "rue": "12 rue des Lilas",
+        "codePostal": "75011",
+        "ville": "Paris",
+        "pays": "France"
+      },
+      "adresseChantier": {
+        "rue": "8 avenue du Parc",
+        "codePostal": "75012",
+        "ville": "Paris",
+        "pays": "France"
+      }
+    },
+    "lignes": [
+      {
+        "numero": "1.1",
+        "designation": "Depose et evacuation sanitaire existant",
+        "unite": "ens",
+        "quantiteCommandee": 1,
+        "quantiteLivree": 1,
+        "quantiteRestante": 0
+      },
+      {
+        "numero": "1.2",
+        "designation": "Fourniture et pose receveur de douche 120x90",
+        "unite": "u",
+        "quantiteCommandee": 1,
+        "quantiteLivree": 1,
+        "quantiteRestante": 0
+      },
+      {
+        "numero": "2.1",
+        "designation": "Carrelage sol gres cerame 60x60",
+        "unite": "m2",
+        "quantiteCommandee": 12,
+        "quantiteLivree": 12,
+        "quantiteRestante": 0
+      },
+      {
+        "numero": "2.2",
+        "designation": "Faience murale 30x60",
+        "unite": "m2",
+        "quantiteCommandee": 19,
+        "quantiteLivree": 19,
+        "quantiteRestante": 0
+      }
+    ]
+  },
+  "societe": {
+    "nom": "BATI PLUS SARL",
+    "email": "contact@batiplus.fr",
+    "telephone": "01 23 45 67 89",
+    "siteWeb": "www.batiplus.fr",
+    "siret": "987 654 321 00021",
+    "tvaIntracommunautaire": "FR 32 987654321",
+    "capital": "50 000 EUR",
+    "adresse": {
+      "rue": "45 boulevard des Artisans",
+      "codePostal": "94000",
+      "ville": "Creteil",
+      "pays": "France"
+    },
+    "mentionsLegales": "SARL au capital de 50 000 EUR — RCS Creteil 987 654 321 — Assurance decennale AXA n0 1234567"
+  },
+  "options": {
+    "titreDocument": "BON DE LIVRAISON",
+    "sousTitreDocument": "",
+    "masquerPrix": false,
+    "lienStripe": "",
+    "zoneSignature": true,
+    "mentionsSpecifiques": "Bon pour accord (date et signature)"
+  }
+}

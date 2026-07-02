@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axiobat/pdf-designer/schemas/MaintenanceOperationSheet/v1",
+  "title": "PdfRenderPayload data — MaintenanceOperationSheet",
+  "description": "Schema v1 des donnees de rendu pour MaintenanceOperationSheet. Source de verite du dictionnaire des templates .mrt et des mappers web/mobile.",
+  "type": "object",
+  "required": [
+    "document",
+    "societe"
+  ],
+  "properties": {
+    "document": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "type": "string"
+        },
+        "titre": {
+          "type": "string"
+        },
+        "sousTitre": {
+          "type": "string"
+        },
+        "objet": {
+          "type": "string"
+        },
+        "dateCreation": {
+          "type": "string"
+        },
+        "dateValidite": {
+          "type": "string"
+        },
+        "statut": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "civilite": {
+              "type": "string"
+            },
+            "nom": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "telephone": {
+              "type": "string"
+            },
+            "siret": {
+              "type": "string"
+            },
+            "adresseFacturation": {
+              "type": "object",
+              "properties": {
+                "rue": {
+                  "type": "string"
+                },
+                "codePostal": {
+                  "type": "string"
+                },
+                "ville": {
+                  "type": "string"
+                },
+                "pays": {
+                  "type": "string"
+                }
+              }
+            },
+            "adresseChantier": {
+              "type": "object",
+              "properties": {
+                "rue": {
+                  "type": "string"
+                },
+                "codePostal": {
+                  "type": "string"
+                },
+                "ville": {
+                  "type": "string"
+                },
+                "pays": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "lignes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "numero": {
+                "type": "string"
+              },
+              "designation": {
+                "type": "string"
+              },
+              "quantite": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "unite": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "prixUnitaire": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "remise": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "tva": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "totalHT": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "totaux": {
+          "type": "object",
+          "properties": {
+            "totalHT": {
+              "type": "number"
+            },
+            "remiseGlobale": {
+              "type": "number"
+            },
+            "detailTva": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "taux": {
+                    "type": "number"
+                  },
+                  "base": {
+                    "type": "number"
+                  },
+                  "montant": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "totalTTC": {
+              "type": "number"
+            },
+            "acompte": {
+              "type": "number"
+            },
+            "netAPayer": {
+              "type": "number"
+            },
+            "totalEnLettres": {
+              "type": "string"
+            }
+          }
+        },
+        "dateIntervention": {
+          "type": "string"
+        },
+        "techniciens": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "type": "string"
+              },
+              "telephone": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "equipements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "designation": {
+                "type": "string"
+              },
+              "marque": {
+                "type": "string"
+              },
+              "modele": {
+                "type": "string"
+              },
+              "numeroSerie": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "observations": {
+          "type": "string"
+        },
+        "signatures": {
+          "type": "object",
+          "properties": {
+            "client": {
+              "type": "boolean"
+            },
+            "technicien": {
+              "type": "boolean"
+            }
+          }
+        },
+        "contrat": {
+          "type": "object",
+          "properties": {
+            "reference": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "dateProchaineVisite": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "societe": {
+      "type": "object",
+      "properties": {
+        "nom": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "telephone": {
+          "type": "string"
+        },
+        "siteWeb": {
+          "type": "string"
+        },
+        "siret": {
+          "type": "string"
+        },
+        "tvaIntracommunautaire": {
+          "type": "string"
+        },
+        "capital": {
+          "type": "string"
+        },
+        "adresse": {
+          "type": "object",
+          "properties": {
+            "rue": {
+              "type": "string"
+            },
+            "codePostal": {
+              "type": "string"
+            },
+            "ville": {
+              "type": "string"
+            },
+            "pays": {
+              "type": "string"
+            }
+          }
+        },
+        "mentionsLegales": {
+          "type": "string"
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "titreDocument": {
+          "type": "string"
+        },
+        "sousTitreDocument": {
+          "type": "string"
+        },
+        "masquerPrix": {
+          "type": "boolean"
+        },
+        "lienStripe": {
+          "type": "string"
+        },
+        "zoneSignature": {
+          "type": "boolean"
+        },
+        "mentionsSpecifiques": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
