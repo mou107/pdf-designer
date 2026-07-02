@@ -182,6 +182,9 @@
             },
             "totalEnLettres": {
               "type": "string"
+            },
+            "totalTva": {
+              "type": "number"
             }
           }
         },
