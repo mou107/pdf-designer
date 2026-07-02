@@ -64,7 +64,8 @@
       "totalTTC": -495,
       "acompte": 1118.7,
       "netAPayer": -495,
-      "totalEnLettres": "Moins quatre cent quatre-vingt-quinze euros"
+      "totalEnLettres": "Moins quatre cent quatre-vingt-quinze euros",
+      "totalTva": -45
     },
     "paiement": {
       "conditions": "30% a la commande, solde a la reception",

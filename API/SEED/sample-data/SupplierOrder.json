@@ -89,7 +89,8 @@
       "totalTTC": 3729,
       "acompte": 1118.7,
       "netAPayer": 3729,
-      "totalEnLettres": "Trois mille sept cent vingt-neuf euros"
+      "totalEnLettres": "Trois mille sept cent vingt-neuf euros",
+      "totalTva": 339
     },
     "paiement": {
       "conditions": "30% a la commande, solde a la reception",

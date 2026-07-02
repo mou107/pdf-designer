@@ -38,7 +38,7 @@
         "prixUnitaire": null,
         "remise": null,
         "tva": null,
-        "totalHT": 1850.00
+        "totalHT": 1850
       },
       {
         "type": "article",
@@ -46,10 +46,10 @@
         "designation": "Depose et evacuation sanitaire existant",
         "quantite": 1,
         "unite": "ens",
-        "prixUnitaire": 450.00,
+        "prixUnitaire": 450,
         "remise": 0,
         "tva": 10,
-        "totalHT": 450.00
+        "totalHT": 450
       },
       {
         "type": "article",
@@ -57,10 +57,10 @@
         "designation": "Fourniture et pose receveur de douche 120x90",
         "quantite": 1,
         "unite": "u",
-        "prixUnitaire": 890.00,
+        "prixUnitaire": 890,
         "remise": 5,
         "tva": 10,
-        "totalHT": 845.50
+        "totalHT": 845.5
       },
       {
         "type": "lot",
@@ -71,7 +71,7 @@
         "prixUnitaire": null,
         "remise": null,
         "tva": null,
-        "totalHT": 1540.00
+        "totalHT": 1540
       },
       {
         "type": "article",
@@ -79,10 +79,10 @@
         "designation": "Carrelage sol gres cerame 60x60",
         "quantite": 12,
         "unite": "m2",
-        "prixUnitaire": 65.00,
+        "prixUnitaire": 65,
         "remise": 0,
         "tva": 10,
-        "totalHT": 780.00
+        "totalHT": 780
       },
       {
         "type": "article",
@@ -90,29 +90,42 @@
         "designation": "Faience murale 30x60",
         "quantite": 19,
         "unite": "m2",
-        "prixUnitaire": 40.00,
+        "prixUnitaire": 40,
         "remise": 0,
         "tva": 10,
-        "totalHT": 760.00
+        "totalHT": 760
       }
     ],
     "totaux": {
-      "totalHT": 3390.00,
+      "totalHT": 3390,
       "remiseGlobale": 0,
       "detailTva": [
-        { "taux": 10, "base": 3390.00, "montant": 339.00 }
+        {
+          "taux": 10,
+          "base": 3390,
+          "montant": 339
+        }
       ],
-      "totalTTC": 3729.00,
-      "acompte": 1118.70,
-      "netAPayer": 3729.00,
-      "totalEnLettres": "Trois mille sept cent vingt-neuf euros"
+      "totalTTC": 3729,
+      "acompte": 1118.7,
+      "netAPayer": 3729,
+      "totalEnLettres": "Trois mille sept cent vingt-neuf euros",
+      "totalTva": 339
     },
     "paiement": {
       "conditions": "30% a la commande, solde a la reception",
       "rib": "FR76 3000 4000 0500 0012 3456 789",
       "echeances": [
-        { "libelle": "Acompte 30%", "date": "2026-07-05", "montant": 1118.70 },
-        { "libelle": "Solde", "date": "2026-08-15", "montant": 2610.30 }
+        {
+          "libelle": "Acompte 30%",
+          "date": "2026-07-05",
+          "montant": 1118.7
+        },
+        {
+          "libelle": "Solde",
+          "date": "2026-08-15",
+          "montant": 2610.3
+        }
       ]
     }
   },
