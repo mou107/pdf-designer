@@ -23,7 +23,11 @@ namespace API.CORE.Services
             [DocTypes.SupplierOrder] = "Bon de commande fournisseur",
             [DocTypes.OperationSheet] = "Fiche d'intervention",
             [DocTypes.MaintenanceOperationSheet] = "Fiche d'intervention maintenance",
-            [DocTypes.BonLivraison] = "Bon de livraison"
+            [DocTypes.BonLivraison] = "Bon de livraison",
+            [DocTypes.WorksiteSheet] = "Fiche chantier",
+            [DocTypes.CustomerSheet] = "Fiche client / prospect",
+            [DocTypes.DealSheet] = "Fiche affaire",
+            [DocTypes.TimeSheet] = "Releve d'heures"
         };
 
         private readonly AppDbContext _db;
@@ -49,10 +53,11 @@ namespace API.CORE.Services
                     .ToListAsync();
 
                 var sampleJson = await _sampleData.GetSampleDataAsync(docType);
+                var maxModel = DocTypes.SingleModel.Contains(docType) ? 1 : ModelCount;
 
-                for (var model = 1; model <= ModelCount; model++)
+                for (var model = 1; model <= maxModel; model++)
                 {
-                    var name = $"Modele {model}";
+                    var name = maxModel == 1 ? "Standard" : $"Modele {model}";
                     if (existing.Contains(name)) continue;
 
                     var template = new ReportTemplate
@@ -60,6 +65,9 @@ namespace API.CORE.Services
                         SocieteId = null,
                         DocType = docType,
                         Name = name,
+                        Model = model,
+                        ConfigJson = TemplateService.DefaultConfigJson,
+                        FileNamePattern = "{TypeDocument}_{Ref}",
                         IsDefault = false
                     };
                     template.FilePath = _storage.BuildRelativePath(null, docType, template.Id, template.Version);
@@ -82,18 +90,19 @@ namespace API.CORE.Services
             await _db.SaveChangesAsync();
         }
 
-        /// <summary>Contenu .mrt de depart pour la creation d'un modele societe ("from": "seed") — Modele 1 du docType.</summary>
-        public async Task<string> GetSeedMrtContentAsync(string docType)
+        /// <summary>Contenu .mrt de depart pour la creation d'un modele societe ("from": "seed") — modele demande (1-7).</summary>
+        public async Task<string> GetSeedMrtContentAsync(string docType, int model = 1)
         {
+            if (model < 1 || model > ModelCount) model = 1;
+
             var seed = await _db.ReportTemplates
-                .Where(t => t.SocieteId == null && t.DocType == docType)
-                .OrderBy(t => t.Name)
+                .Where(t => t.SocieteId == null && t.DocType == docType && t.Model == model)
                 .FirstOrDefaultAsync();
 
             if (seed != null && _storage.Exists(seed.FilePath))
                 return await _storage.ReadAsync(seed.FilePath);
 
-            var report = SeedTemplateFactory.Build(1, docType, Labels[docType], await _sampleData.GetSampleDataAsync(docType));
+            var report = SeedTemplateFactory.Build(model, docType, Labels[docType], await _sampleData.GetSampleDataAsync(docType));
             return report.SaveToString();
         }
 

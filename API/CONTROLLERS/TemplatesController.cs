@@ -37,7 +37,7 @@ namespace API.CONTROLLERS
 
             var seedContent = request.From == "blank"
                 ? await _seeds.BuildBlankMrtAsync(request.DocType)
-                : await _seeds.GetSeedMrtContentAsync(request.DocType);
+                : await _seeds.GetSeedMrtContentAsync(request.DocType, request.Model);
 
             var created = await _templates.CreateAsync(request, seedContent);
             return Ok(created);
@@ -57,6 +57,23 @@ namespace API.CONTROLLERS
             var template = await _templates.FindOwnedAsync(id);
             if (template == null) return NotFound();
             return Ok(await _templates.UpdateAsync(template, request));
+        }
+
+        [HttpPut("{id}/config")]
+        public async Task<IActionResult> SaveConfig(string id, [FromBody] SaveConfigRequest request)
+        {
+            var template = await _templates.FindOwnedAsync(id);
+            if (template == null) return NotFound();
+            return Ok(await _templates.SaveConfigAsync(template, request));
+        }
+
+        [HttpPost("{id}/apply-to-all")]
+        public async Task<IActionResult> ApplyToAll(string id)
+        {
+            var template = await _templates.FindOwnedAsync(id);
+            if (template == null) return NotFound();
+            var (applied, skipped) = await _templates.ApplyToAllDocTypesAsync(template);
+            return Ok(new { applied, skipped });
         }
 
         [HttpPut("{id}/default")]

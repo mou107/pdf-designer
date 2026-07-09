@@ -36,6 +36,21 @@ using (var scope = app.Services.CreateScope())
     await seedService.EnsureSeedsAsync();
 }
 
+// Prechauffage du moteur Stimulsoft : le 1er rendu est ~15x plus lent (fontes/warmup) ;
+// on le fait au demarrage pour que le 1er apercu utilisateur soit rapide.
+try
+{
+    var warm = Stimulsoft.Report.StiReport.CreateNewReport();
+    warm.Render(false);
+    using var warmStream = new MemoryStream();
+    warm.ExportDocument(Stimulsoft.Report.StiExportFormat.Pdf, warmStream);
+    Log.Information("Moteur Stimulsoft prechauffe ({Size} octets).", warmStream.Length);
+}
+catch (Exception ex)
+{
+    Log.Warning(ex, "Echec du prechauffage du moteur Stimulsoft (non bloquant).");
+}
+
 app.MapHealthChecks("/health");
 app.AddCors();
 

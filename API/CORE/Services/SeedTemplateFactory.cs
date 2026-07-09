@@ -38,6 +38,27 @@ namespace API.CORE.Services
             var page = report.Pages[0];
             page.Components.Clear();
 
+            // Devis : entete distincte selon le modele (1-7) + corps fidele (tableau, totaux, pied legal).
+            if (docType == DocTypes.Quote)
+            {
+                page.Components.Add(model switch
+                {
+                    7 => BuildQuoteHeaderModel7(),
+                    6 => BuildQuoteHeaderModel6(),
+                    5 => BuildQuoteHeaderModel5(),
+                    4 => BuildQuoteHeaderModel4(),
+                    3 => BuildQuoteHeaderModel3(),
+                    2 => BuildQuoteHeaderModel2(),
+                    _ => BuildTitleBand(model, docType)
+                });
+                AddQuoteTable(page);
+                AddQuoteTotals(page);
+                // Modeles 5/6 sobres (papier entête) : pied de page discret ; sinon bande couleur.
+                page.Components.Add(model == 5 || model == 6 ? BuildQuotePlainFooter() : BuildQuotePageFooter());
+                RenderService.RegisterData(report, sampleJson);
+                return report;
+            }
+
             page.Components.Add(BuildTitleBand(model, docType));
 
             if (docType == DocTypes.OperationSheet || docType == DocTypes.MaintenanceOperationSheet)
@@ -60,6 +81,284 @@ namespace API.CORE.Services
 
             RenderService.RegisterData(report, sampleJson);
             return report;
+        }
+
+        // ================================================================= DEVIS FIDELE
+
+        /// <summary>Entete Devis fidele au modele 7 Axiobat : bandeau orange, logo, boites Devis N°/Date/Client,
+        /// titre « Devis », bloc societe, bloc client a crochets d'angle, adresse d'intervention, affaire suivie par.</summary>
+        private static StiReportTitleBand BuildQuoteHeaderModel7()
+        {
+            var band = new StiReportTitleBand { Name = "Entete", Height = 7.4, CanShrink = false };
+
+            // Bandeau orange en tete
+            band.Components.Add(Rect(0, 0, W, 0.28, Accent));
+
+            // Logo (image societe)
+            band.Components.Add(new StiImage(new RectangleD(0, 0.5, 5.0, 1.7))
+            {
+                Name = SocieteAssetsService.LogoComponentName,
+                Stretch = true,
+                AspectRatio = true
+            });
+
+            // Boites Devis N° / Date / Client (haut droite)
+            AddQuoteInfoBox(band, 11.0, 0.5, "Devis N°", "{document.reference}");
+            AddQuoteInfoBox(band, 13.7, 0.5, "Date", "{document.dateCreation}", isDate: true);
+            AddQuoteInfoBox(band, 16.4, 0.5, "Client", "{client.nom}");
+
+            // Titre centre
+            band.Components.Add(Txt(0, 2.6, W, 0.9, "{document.titre}", 21, bold: true, align: StiTextHorAlignment.Center, color: Dark));
+
+            // Bloc societe (gauche)
+            band.Components.Add(Txt(0, 3.9, 8.0, 2.2,
+                "{societe.nom}\n{adresse.rue}\n{adresse.codePostal} {adresse.ville}\nTél : {societe.telephone}\nEmail : {societe.email}",
+                8.5f, color: Dark));
+
+            // Bloc client a crochets d'angle (droite)
+            band.Components.Add(Txt(11.3, 4.0, 6.5, 1.8,
+                "{client.civilite} {client.nom}\nTVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}",
+                8.5f, color: Dark));
+            AddCornerBrackets(band, 10.7, 3.7, 8.0, 2.1);
+
+            // Adresse d'intervention + affaire suivie par
+            band.Components.Add(Txt(0, 6.3, W, 0.5, "Adresse d'intervention : {adresseChantier.rue} {adresseChantier.codePostal} {adresseChantier.ville} {adresseChantier.pays}", 9, bold: true, color: Dark));
+            band.Components.Add(Txt(0, 6.8, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+
+            return band;
+        }
+
+        // Expressions communes aux entetes Devis
+        private const string SocieteExpr = "{societe.nom}\n{adresse.rue}\n{adresse.codePostal} {adresse.ville}\nTél : {societe.telephone}\nEmail : {societe.email}";
+        private const string ClientExpr = "{client.civilite} {client.nom}\nTVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}";
+        private const string DateCreation = "{document.dateCreation.ToString(\"dd-MM-yyyy\")}";
+        private const string DateValidite = "{document.dateValidite.ToString(\"dd-MM-yyyy\")}";
+        private const string DevisInfoExpr = "Devis\nDate de création : " + DateCreation + "\nFin validité : " + DateValidite;
+        private const string AdresseInterExpr = "Adresse d'intervention :\n{adresseChantier.rue}\n{adresseChantier.codePostal} {adresseChantier.ville}\n{adresseChantier.pays}";
+
+        /// <summary>Modele 5 (sobre, papier entête) : Devis a gauche, client + adresse a droite. Pas de couleur d'entete.</summary>
+        private static StiReportTitleBand BuildQuoteHeaderModel5()
+        {
+            var band = new StiReportTitleBand { Name = "Entete", Height = 5.6, CanShrink = false };
+            AddLabeledBlock(band, 0, 1.8, 8.0, "Devis", "Date de création : " + DateCreation + "\nFin validité : " + DateValidite);
+            AddLabeledBlock(band, 10.5, 1.8, 8.0, "{client.civilite} {client.nom}", "TVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}");
+            AddLabeledBlock(band, 10.5, 3.4, 8.0, "Adresse d'intervention :", "{adresseChantier.rue}\n{adresseChantier.codePostal} {adresseChantier.ville} {adresseChantier.pays}");
+            band.Components.Add(Txt(0, 5.0, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            return band;
+        }
+
+        /// <summary>Modele 6 (sobre, papier entête) : blocs en colonne centrale. Pas de couleur d'entete.</summary>
+        private static StiReportTitleBand BuildQuoteHeaderModel6()
+        {
+            var band = new StiReportTitleBand { Name = "Entete", Height = 6.0, CanShrink = false };
+            AddLabeledBlock(band, 10.5, 1.2, 8.0, "Devis", "Date de création : " + DateCreation + "\nFin validité : " + DateValidite);
+            AddLabeledBlock(band, 10.5, 2.8, 8.0, "{client.civilite} {client.nom}", "TVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}");
+            AddLabeledBlock(band, 10.5, 4.2, 8.0, "Adresse d'intervention :", "{adresseChantier.rue}\n{adresseChantier.codePostal} {adresseChantier.ville} {adresseChantier.pays}");
+            band.Components.Add(Txt(0, 5.5, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            return band;
+        }
+
+        /// <summary>Bloc avec 1re ligne en gras (label) + detail normal — pour les modeles sobres 5/6.</summary>
+        private static void AddLabeledBlock(StiBand band, double x, double y, double w, string label, string detail)
+        {
+            band.Components.Add(Txt(x, y, w, 0.5, label, 9.5f, bold: true, color: Dark));
+            band.Components.Add(Txt(x, y + 0.5, w, 1.1, detail, 8.5f, color: Dark));
+        }
+
+        /// <summary>Pied de page discret (modeles sobres 5/6) : filet gris + mentions, pas de bande couleur.</summary>
+        private static StiPageFooterBand BuildQuotePlainFooter()
+        {
+            var band = new StiPageFooterBand { Name = "PiedDePage", Height = 1.1 };
+            band.Components.Add(Rect(0, 0.1, W, 0.02, Color.Silver));
+            band.Components.Add(Txt(0, 0.2, 16, 0.8,
+                "{societe.nom} — {adresse.rue}, {adresse.codePostal} {adresse.ville} — Tél : {societe.telephone}\n{societe.mentionsLegales} — TVA : {societe.tvaIntracommunautaire}",
+                7, color: Color.Gray));
+            band.Components.Add(Txt(16.2, 0.3, 2.8, 0.5, "Page {PageNumber} / {TotalPageCount}", 8, color: Color.Gray, align: StiTextHorAlignment.Right));
+            return band;
+        }
+
+        /// <summary>Modele 2 : bandeau orange, logo + societe en clair, boites claires (Devis / client / adresse).</summary>
+        private static StiReportTitleBand BuildQuoteHeaderModel2()
+        {
+            var band = new StiReportTitleBand { Name = "Entete", Height = 7.4, CanShrink = false };
+            band.Components.Add(Rect(0, 0, W, 0.5, Accent));
+            AddLogo(band, 0, 0.9);
+            band.Components.Add(Txt(11, 0.95, 8, 2.2, SocieteExpr, 8.5f, color: Dark));
+            band.Components.Add(LightBox(0, 3.3, 7.5, 1.3, DevisInfoExpr));
+            band.Components.Add(LightBox(11, 3.3, 8, 1.5, ClientExpr));
+            band.Components.Add(LightBox(11, 5.0, 8, 1.3, AdresseInterExpr));
+            band.Components.Add(Txt(0, 6.7, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            return band;
+        }
+
+        /// <summary>Modele 3 : logo a gauche, gros bloc societe orange (texte blanc) a droite, blocs a liseré.</summary>
+        private static StiReportTitleBand BuildQuoteHeaderModel3()
+        {
+            var band = new StiReportTitleBand { Name = "Entete", Height = 7.4, CanShrink = false };
+            AddLogo(band, 0, 0.5);
+            band.Components.Add(Rect(10.0, 0.3, 9.0, 2.4, Accent));
+            band.Components.Add(Txt(10.35, 0.5, 8.4, 2.1, SocieteExpr, 8.5f, color: Color.White, transparent: true));
+            AddBorderBlock(band, 0, 3.3, 7.5, 1.3, DevisInfoExpr);
+            AddBorderBlock(band, 10.5, 3.3, 8.0, 1.4, ClientExpr);
+            AddBorderBlock(band, 10.5, 4.9, 8.0, 1.3, AdresseInterExpr);
+            band.Components.Add(Txt(0, 6.6, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            return band;
+        }
+
+        /// <summary>Modele 4 : logo a gauche, bandeau orange arrondi (Devis/dates en blanc) a droite, blocs a liseré.</summary>
+        private static StiReportTitleBand BuildQuoteHeaderModel4()
+        {
+            var band = new StiReportTitleBand { Name = "Entete", Height = 7.4, CanShrink = false };
+            AddLogo(band, 0, 0.6);
+            band.Components.Add(RoundedRect(8.8, 0, 10.2, 2.5, Accent));
+            band.Components.Add(Txt(9.4, 0.5, 9.2, 1.8, DevisInfoExpr, 10, bold: true, color: Color.White, transparent: true));
+            AddBorderBlock(band, 0, 3.1, 8.5, 1.8, SocieteExpr);
+            AddBorderBlock(band, 10.5, 3.1, 8.0, 1.4, ClientExpr);
+            AddBorderBlock(band, 10.5, 4.7, 8.0, 1.3, AdresseInterExpr);
+            band.Components.Add(Txt(0, 6.5, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            return band;
+        }
+
+        /// <summary>Boite a fond clair (recoloree en version claire de la couleur societe).</summary>
+        private static StiText LightBox(double x, double y, double w, double h, string expr)
+        {
+            var box = Txt(x + 0.25, y, w - 0.25, h, expr, 8.5f, color: Dark);
+            box.Brush = new StiSolidBrush(AccentLight);
+            return box;
+        }
+
+        /// <summary>Bloc a liseré orange a gauche (recolore) + texte, ajoutes a la bande.</summary>
+        private static void AddBorderBlock(StiBand band, double x, double y, double w, double h, string expr)
+        {
+            band.Components.Add(Rect(x, y, 0.12, h, Accent)); // liseré vertical orange
+            band.Components.Add(Txt(x + 0.35, y, w - 0.35, h, expr, 8.5f, color: Dark));
+        }
+
+        private static void AddQuoteInfoBox(StiBand band, double x, double y, string label, string expr, bool isDate = false)
+        {
+            const double w = 2.5;
+            var head = Txt(x, y, w, 0.45, label, 8, bold: true, color: Color.White, align: StiTextHorAlignment.Center);
+            head.Brush = new StiSolidBrush(Accent);
+            band.Components.Add(head);
+
+            var value = isDate
+                ? DateValue(x, y + 0.45, w, expr, StiTextHorAlignment.Center)
+                : Txt(x, y + 0.45, w, 0.5, expr, 8, align: StiTextHorAlignment.Center, color: Dark);
+            value.Height = 0.5;
+            value.Border = new StiBorder(StiBorderSides.All, Color.Silver, 1, StiPenStyle.Solid);
+            band.Components.Add(value);
+        }
+
+        /// <summary>Crochets d'angle gris (┌ ┐ └ ┘) autour d'une zone — comme le bloc client du modele 7.</summary>
+        private static void AddCornerBrackets(StiBand band, double x, double y, double w, double h)
+        {
+            const double len = 0.55, th = 0.03;
+            var gray = Color.DarkGray;
+            // haut-gauche
+            band.Components.Add(Rect(x, y, len, th, gray));
+            band.Components.Add(Rect(x, y, th, len, gray));
+            // haut-droite
+            band.Components.Add(Rect(x + w - len, y, len, th, gray));
+            band.Components.Add(Rect(x + w - th, y, th, len, gray));
+            // bas-gauche
+            band.Components.Add(Rect(x, y + h - th, len, th, gray));
+            band.Components.Add(Rect(x, y + h - len, th, len, gray));
+            // bas-droite
+            band.Components.Add(Rect(x + w - len, y + h - th, len, th, gray));
+            band.Components.Add(Rect(x + w - th, y + h - len, th, len, gray));
+        }
+
+        /// <summary>Tableau des lignes fidele au Devis Axiobat (entete orange, colonnes Designation/Qte/PU/TVA/HT).</summary>
+        private static void AddQuoteTable(StiPage page)
+        {
+            var header = new StiHeaderBand { Name = "EnteteLignes", Height = 0.6, PrintOnAllPages = true };
+            var data = new StiDataBand { Name = "Lignes", Height = 0.5, DataSourceName = "lignes", CanShrink = true, CanGrow = true };
+
+            // Fond clair des lignes (recolore en version claire de la couleur societe) — 1 ligne sur 2.
+            var rowBg = Rect(0, 0, W, 0.5, AccentLight);
+            rowBg.Name = "RowBg";
+            rowBg.CanGrow = true;
+            rowBg.Conditions.Add(new Stimulsoft.Report.Components.StiCondition
+            {
+                Expression = "(Line % 2) == 0",
+                BackColor = Color.White
+            });
+            data.Components.Add(rowBg);
+
+            AddQuoteColumn(header, data, 0.0, 10.4, "Désignation", "{lignes.designationHtml}", StiTextHorAlignment.Left, cellName: "CellDesignation", allowHtml: true);
+            AddQuoteColumn(header, data, 10.4, 1.6, "Qté", "{lignes.quantite}", StiTextHorAlignment.Right);
+            AddQuoteColumn(header, data, 12.0, 2.4, "Prix U.", "{lignes.prixUnitaire}", StiTextHorAlignment.Right, money: true);
+            AddQuoteColumn(header, data, 14.4, 1.6, "TVA", "{lignes.tva}", StiTextHorAlignment.Right);
+            AddQuoteColumn(header, data, 16.0, 3.0, "Prix HT", "{lignes.totalHT}", StiTextHorAlignment.Right, money: true);
+
+            page.Components.Add(header);
+            page.Components.Add(data);
+        }
+
+        /// <summary>Bloc totaux fidele (Total HT / TVA / Total TTC + Net a payer en bandes couleur societe).</summary>
+        private static void AddQuoteTotals(StiPage page)
+        {
+            var footer = new StiFooterBand { Name = "Totaux", Height = 4.6, CanShrink = true };
+
+            footer.Components.Add(Txt(0, 0.4, 9.5, 0.5, "Conditions de règlement", 9, bold: true, color: Dark));
+            footer.Components.Add(Txt(0, 0.9, 9.5, 1.4, "{paiement.conditions}\nRIB : {paiement.rib}", 8, color: Color.DimGray));
+
+            footer.Components.Add(Txt(11.5, 0.4, 4.5, 0.5, "Total HT", 9, align: StiTextHorAlignment.Right, color: Dark));
+            footer.Components.Add(MoneyValue(16.0, 0.4, 3.0, "{totaux.totalHT}"));
+            footer.Components.Add(Txt(11.5, 0.95, 4.5, 0.5, "Total TVA", 9, align: StiTextHorAlignment.Right, color: Dark));
+            footer.Components.Add(MoneyValue(16.0, 0.95, 3.0, "{totaux.totalTva}"));
+
+            var ttcLabel = Txt(11.5, 1.6, 4.5, 0.62, "Total TTC", 10, bold: true, align: StiTextHorAlignment.Right, color: Color.White);
+            ttcLabel.Brush = new StiSolidBrush(Accent);
+            footer.Components.Add(ttcLabel);
+            var ttcValue = MoneyValue(16.0, 1.6, 3.0, "{totaux.totalTTC}");
+            ttcValue.Brush = new StiSolidBrush(Accent);
+            ttcValue.TextBrush = new StiSolidBrush(Color.White);
+            ttcValue.Font = new Stimulsoft.Drawing.Font("Arial", 10, FontStyle.Bold);
+            ttcValue.Height = 0.62;
+            footer.Components.Add(ttcValue);
+
+            var netLabel = Txt(11.5, 2.25, 4.5, 0.62, "Net à payer", 10, bold: true, align: StiTextHorAlignment.Right, color: Color.White);
+            netLabel.Brush = new StiSolidBrush(Accent);
+            footer.Components.Add(netLabel);
+            var netValue = MoneyValue(16.0, 2.25, 3.0, "{totaux.netAPayer}");
+            netValue.Brush = new StiSolidBrush(Accent);
+            netValue.TextBrush = new StiSolidBrush(Color.White);
+            netValue.Font = new Stimulsoft.Drawing.Font("Arial", 10, FontStyle.Bold);
+            netValue.Height = 0.62;
+            footer.Components.Add(netValue);
+
+            footer.Components.Add(Txt(11.5, 3.0, 7.5, 0.5, "{totaux.totalEnLettres}", 8, color: Color.DimGray, align: StiTextHorAlignment.Right));
+            footer.Components.Add(Txt(0, 3.0, 9.5, 0.5, "{options.mentionsSpecifiques}", 8, color: Color.Gray));
+
+            page.Components.Add(footer);
+        }
+
+        /// <summary>Pied de page legal fidele (bande couleur societe : coordonnees + mentions legales).</summary>
+        private static StiPageFooterBand BuildQuotePageFooter()
+        {
+            var pageFooter = new StiPageFooterBand { Name = "PiedDePage", Height = 1.3 };
+            pageFooter.Components.Add(Rect(0, 0.15, W, 1.0, Accent));
+            pageFooter.Components.Add(Txt(0.4, 0.28, 15.5, 0.85,
+                "{societe.nom} — {adresse.rue}, {adresse.codePostal} {adresse.ville} — Tel : {societe.telephone} — {societe.email}\n{societe.mentionsLegales} — TVA : {societe.tvaIntracommunautaire}",
+                7, color: Color.White, transparent: true));
+            pageFooter.Components.Add(Txt(16.2, 0.4, 2.8, 0.6, "Page {PageNumber} / {TotalPageCount}", 8, color: Color.White, align: StiTextHorAlignment.Right, transparent: true));
+            return pageFooter;
+        }
+
+        private static void AddQuoteColumn(StiBand header, StiDataBand data, double x, double w, string title, string expr, StiTextHorAlignment align, bool money = false, string? cellName = null, bool allowHtml = false)
+        {
+            var head = Txt(x, 0.06, w, 0.5, title, 9, bold: true, color: Color.White, align: align);
+            head.Brush = new StiSolidBrush(Accent);
+            header.Components.Add(head);
+
+            var cell = Txt(x, 0.0, w, 0.5, expr, 8.5f, align: align, color: Dark);
+            if (cellName != null) cell.Name = cellName;
+            if (allowHtml) cell.AllowHtmlTags = true;
+            cell.Border = new StiBorder(StiBorderSides.Bottom, AccentLight, 1, StiPenStyle.Solid);
+            cell.CanGrow = true;
+            if (money) cell.TextFormat = Money();
+            data.Components.Add(cell);
         }
 
         // ================================================================= ENTETES
@@ -170,8 +469,13 @@ namespace API.CORE.Services
 
         private static void AddLogo(StiReportTitleBand band, double x, double y)
         {
-            band.Components.Add(Rect(x, y + 0.12, 0.35, 0.35, Accent));
-            band.Components.Add(Txt(x + 0.5, y, 5.0, 0.7, "{societe.nom}", 13, bold: true, color: Dark));
+            // Vraie image de logo (alimentee par les assets societe au rendu / a l'ouverture du designer).
+            band.Components.Add(new StiImage(new RectangleD(x, y, 4.8, 1.9))
+            {
+                Name = SocieteAssetsService.LogoComponentName,
+                Stretch = true,
+                AspectRatio = true
+            });
         }
 
         private static void AddDocInfo(StiReportTitleBand band, double x, double y, string docType)

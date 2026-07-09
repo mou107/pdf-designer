@@ -25,14 +25,25 @@ namespace API.CORE.Services
 
         public async Task<List<TemplateModel>> ListAsync(string? docType)
         {
+            // La bibliotheque affiche les templates de la societe ET les modeles standards Foliatech
+            // (seeds globaux, SocieteId null) pour que l'utilisateur puisse choisir/dupliquer les 7 modeles.
             var query = _db.ReportTemplates
                 .Where(t => t.IsActive && (t.SocieteId == _tenant.SocieteId || t.SocieteId == null));
 
             if (!string.IsNullOrWhiteSpace(docType))
                 query = query.Where(t => t.DocType == docType);
 
-            var items = await query.OrderBy(t => t.DocType).ThenByDescending(t => t.IsDefault).ThenBy(t => t.Name).ToListAsync();
-            return items.Select(ToModel).ToList();
+            var items = await query.ToListAsync();
+
+            // Ordre : templates de la societe d'abord (defaut en tete), puis les modeles standards par numero.
+            var ordered = items
+                .OrderBy(t => t.SocieteId == null ? 1 : 0)
+                .ThenByDescending(t => t.SocieteId != null && t.IsDefault)
+                .ThenBy(t => t.SocieteId == null ? t.Model : 0)
+                .ThenBy(t => t.Name)
+                .ToList();
+
+            return ordered.Select(ToModel).ToList();
         }
 
         public async Task<ReportTemplate?> FindOwnedAsync(string id)
@@ -40,6 +51,13 @@ namespace API.CORE.Services
 
         public async Task<ReportTemplate?> FindReadableAsync(string id)
             => await _db.ReportTemplates.FirstOrDefaultAsync(t => t.Id == id && (t.SocieteId == _tenant.SocieteId || t.SocieteId == null));
+
+        /// <summary>Seed global (modele standard) pour (docType, model) — pour l'apercu d'un autre modele.</summary>
+        public async Task<ReportTemplate?> FindSeedAsync(string docType, int model)
+            => await _db.ReportTemplates.FirstOrDefaultAsync(t => t.SocieteId == null && t.DocType == docType && t.Model == model && t.IsActive);
+
+        /// <summary>Chemin absolu du .mrt d'un template (pour le rendu direct).</summary>
+        public string GetAbsolutePath(ReportTemplate template) => _storage.GetAbsolutePath(template.FilePath);
 
         /// <summary>Resout le template de rendu : id explicite -> defaut societe -> seed global du docType.</summary>
         public async Task<ReportTemplate?> ResolveForRenderAsync(string docType, string? templateId)
@@ -65,6 +83,11 @@ namespace API.CORE.Services
                 SocieteId = _tenant.SocieteId,
                 DocType = request.DocType,
                 Name = string.IsNullOrWhiteSpace(request.Name) ? $"Nouveau modele {request.DocType}" : request.Name,
+                Description = request.Description,
+                Model = request.Model is >= 1 and <= 7 ? request.Model : 1,
+                TableStyle = 2,
+                ConfigJson = DefaultConfigJson,
+                FileNamePattern = "{TypeDocument}_{Ref}",
                 CreatedBy = _tenant.UserId,
                 UpdatedBy = _tenant.UserId
             };
@@ -98,6 +121,12 @@ namespace API.CORE.Services
                 SocieteId = _tenant.SocieteId,
                 DocType = source.DocType,
                 Name = $"{source.Name} (copie)",
+                Description = source.Description,
+                Model = source.Model,
+                TableStyle = source.TableStyle,
+                ConfigJson = source.ConfigJson ?? DefaultConfigJson,
+                FileNamePattern = source.FileNamePattern,
+                IsDesignerCustomized = source.IsDesignerCustomized,
                 CreatedBy = _tenant.UserId,
                 UpdatedBy = _tenant.UserId
             };
@@ -113,11 +142,73 @@ namespace API.CORE.Services
         public async Task<TemplateModel> UpdateAsync(ReportTemplate template, UpdateTemplateRequest request)
         {
             if (!string.IsNullOrWhiteSpace(request.Name)) template.Name = request.Name;
+            if (request.Description != null) template.Description = request.Description;
+            if (request.FileNamePattern != null) template.FileNamePattern = request.FileNamePattern;
             if (request.IsActive.HasValue) template.IsActive = request.IsActive.Value;
             template.UpdatedAt = DateTime.UtcNow;
             template.UpdatedBy = _tenant.UserId;
             await _db.SaveChangesAsync();
             return ToModel(template);
+        }
+
+        /// <summary>Sauvegarde de la config simple depuis l'ecran de parametrage : bump de version + snapshot.</summary>
+        public async Task<TemplateModel> SaveConfigAsync(ReportTemplate template, SaveConfigRequest request)
+        {
+            var modelChanged = request.Model is >= 1 and <= 7 && request.Model.Value != template.Model;
+
+            if (request.Model is >= 1 and <= 7) template.Model = request.Model.Value;
+            if (request.TableStyle is >= 1 and <= 3) template.TableStyle = request.TableStyle.Value;
+            if (request.ConfigJson != null) template.ConfigJson = request.ConfigJson;
+            if (request.FileNamePattern != null) template.FileNamePattern = request.FileNamePattern;
+
+            var oldPath = template.FilePath;
+            template.Version += 1;
+            template.UpdatedAt = DateTime.UtcNow;
+            template.UpdatedBy = _tenant.UserId;
+            template.MasterUpdateAvailable = false;
+
+            // Changement de modele : on recopie la mise en page (.mrt) du modele standard choisi (1-7).
+            // Sinon le .mrt est inchange (la config simple est injectee en variables au rendu).
+            if (modelChanged)
+            {
+                var seed = await _db.ReportTemplates.FirstOrDefaultAsync(t =>
+                    t.SocieteId == null && t.DocType == template.DocType && t.Model == template.Model && t.IsActive);
+
+                template.FilePath = _storage.BuildRelativePath(template.SocieteId, template.DocType, template.Id, template.Version);
+                var content = seed != null && _storage.Exists(seed.FilePath)
+                    ? await _storage.ReadAsync(seed.FilePath)
+                    : await _storage.ReadAsync(oldPath);
+                await _storage.WriteAsync(template.FilePath, content);
+            }
+
+            _db.ReportTemplateVersions.Add(NewVersion(template));
+            await _db.SaveChangesAsync();
+            return ToModel(template);
+        }
+
+        /// <summary>Applique le modele + config du template source au template PAR DEFAUT de chaque autre docType (parite "UpdateAll").</summary>
+        public async Task<(int applied, List<string> skipped)> ApplyToAllDocTypesAsync(ReportTemplate source)
+        {
+            var defaults = await _db.ReportTemplates
+                .Where(t => t.SocieteId == _tenant.SocieteId && t.IsDefault && t.IsActive && t.DocType != source.DocType)
+                .ToListAsync();
+
+            var applied = 0;
+            var skipped = new List<string>();
+            foreach (var def in defaults)
+            {
+                if (def.IsDesignerCustomized) { skipped.Add(def.DocType); continue; }
+                def.Model = DocTypes.SingleModel.Contains(def.DocType) ? 1 : source.Model;
+                def.TableStyle = source.TableStyle;
+                def.ConfigJson = source.ConfigJson;
+                def.Version += 1;
+                def.UpdatedAt = DateTime.UtcNow;
+                def.UpdatedBy = _tenant.UserId;
+                _db.ReportTemplateVersions.Add(NewVersion(def));
+                applied++;
+            }
+            await _db.SaveChangesAsync();
+            return (applied, skipped);
         }
 
         public async Task SetDefaultAsync(ReportTemplate template)
@@ -150,6 +241,8 @@ namespace API.CORE.Services
             template.FilePath = _storage.BuildRelativePath(template.SocieteId, template.DocType, template.Id, template.Version);
             template.UpdatedAt = DateTime.UtcNow;
             template.UpdatedBy = _tenant.UserId;
+            // Toute sauvegarde depuis le designer rend le template "personnalise" (config simple desactivee).
+            template.IsDesignerCustomized = true;
 
             await _storage.WriteAsync(template.FilePath, mrtContent);
             _db.ReportTemplateVersions.Add(NewVersion(template));
@@ -181,11 +274,32 @@ namespace API.CORE.Services
             SocieteId = t.SocieteId,
             DocType = t.DocType,
             Name = t.Name,
+            Description = t.Description,
             IsDefault = t.IsDefault,
             IsActive = t.IsActive,
             IsSeed = t.SocieteId == null,
+            Model = t.Model,
+            TableStyle = t.TableStyle,
+            ConfigJson = t.ConfigJson,
+            FileNamePattern = t.FileNamePattern,
+            IsDesignerCustomized = t.IsDesignerCustomized,
+            MasterUpdateAvailable = t.MasterUpdateAvailable,
             Version = t.Version,
-            UpdatedAt = t.UpdatedAt
+            CreatedAt = t.CreatedAt,
+            UpdatedAt = t.UpdatedAt,
+            CreatedBy = t.CreatedBy,
+            UpdatedBy = t.UpdatedBy
         };
+
+        /// <summary>Config simple par defaut (couleur principale, colonnes, styles de texte) — parite ecran actuel.</summary>
+        public const string DefaultConfigJson =
+            "{\"colors\":{\"main\":\"#47a2c1\",\"header\":\"#47a2c1\",\"total\":\"#47a2c1\",\"alt1\":\"#F1F6F8\"}," +
+            "\"cols\":{\"num\":false,\"vignette\":false,\"qte\":true,\"unite\":true,\"prixU\":true,\"tva\":true,\"prixHT\":true,\"ttc\":true}," +
+            "\"lineStyles\":{" +
+            "\"article\":{\"size\":10,\"bold\":true,\"italic\":false,\"underline\":false,\"color\":\"#333333\"}," +
+            "\"ouvrage\":{\"size\":9,\"bold\":true,\"italic\":false,\"underline\":false,\"color\":\"#C0392B\"}," +
+            "\"sousOuvrage\":{\"size\":9,\"bold\":false,\"italic\":true,\"underline\":false,\"color\":\"#333333\"}," +
+            "\"lot\":{\"size\":12,\"bold\":true,\"italic\":false,\"underline\":false,\"color\":\"#C0392B\"}," +
+            "\"ligne\":{\"size\":9,\"bold\":false,\"italic\":false,\"underline\":false,\"color\":\"#333333\"}}}";
     }
 }

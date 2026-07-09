@@ -18,12 +18,14 @@ namespace API.CONTROLLERS
         private readonly TemplateService _templates;
         private readonly TemplateStorageService _storage;
         private readonly SampleDataService _sampleData;
+        private readonly SocieteAssetsService _assets;
 
-        public DesignerController(TemplateService templates, TemplateStorageService storage, SampleDataService sampleData)
+        public DesignerController(TemplateService templates, TemplateStorageService storage, SampleDataService sampleData, SocieteAssetsService assets)
         {
             _templates = templates;
             _storage = storage;
             _sampleData = sampleData;
+            _assets = assets;
         }
 
         [HttpGet]
@@ -71,7 +73,13 @@ namespace API.CONTROLLERS
 
             // Dictionnaire synchronise sur les donnees exemples du docType : l'utilisateur
             // voit les champs disponibles et la preview du designer rend avec ces donnees.
-            RenderService.RegisterData(report, await _sampleData.GetSampleDataAsync(template.DocType));
+            var sample = DataStyler.AddDesignationHtml(await _sampleData.GetSampleDataAsync(template.DocType), template.ConfigJson);
+            RenderService.RegisterData(report, sample);
+            // Logo + fond + couleur + style de tableau de la societe : le designer affiche la meme
+            // mise en page que l'apercu (config PDF de la societe).
+            _assets.Apply(report, template.SocieteId);
+            PdfConfigApplier.Apply(report, template.ConfigJson, _assets.Get(template.SocieteId)?.MainColor);
+            TableStyleApplier.Apply(report, template.TableStyle);
 
             return StiAngularDesigner.GetReportResult(this, report);
         }
