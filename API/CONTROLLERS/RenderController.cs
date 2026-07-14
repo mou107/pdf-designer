@@ -48,6 +48,11 @@ namespace API.CONTROLLERS
             public string? SocieteJson { get; set; }
             /// <summary>Style de tableau (1-3) — bordures / lignes alternees.</summary>
             public int? TableStyle { get; set; }
+            /// <summary>Dimensions du logo / cachet en pixels — redimensionnent leur boite au rendu (0/absent = defaut).</summary>
+            public double? LogoWidth { get; set; }
+            public double? LogoHeight { get; set; }
+            public double? CachetWidth { get; set; }
+            public double? CachetHeight { get; set; }
         }
 
         /// <summary>Preversion d'un modele avec les donnees exemples du docType + la config societe (couleurs, logo…).</summary>
@@ -60,10 +65,11 @@ namespace API.CONTROLLERS
             if (template == null) return NotFound();
 
             // Trace de diagnostic : que recoit-on reellement du webadmin ?
-            _logger.LogInformation("PREVIEW model={Model} tableStyle={Table} configLen={Len} config={Config} societeLen={SocLen}",
+            _logger.LogInformation("PREVIEW model={Model} tableStyle={Table} configLen={Len} config={Config} societeLen={SocLen} logoDim={LW}x{LH} cachetDim={CW}x{CH}",
                 request?.Model, request?.TableStyle, request?.ConfigJson?.Length ?? 0,
                 request?.ConfigJson?.Length > 400 ? request.ConfigJson.Substring(0, 400) : request?.ConfigJson,
-                request?.SocieteJson?.Length ?? 0);
+                request?.SocieteJson?.Length ?? 0,
+                request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight);
 
             var sampleJson = await _sampleData.GetSampleDataAsync(template.DocType);
             // Remplace l'identite societe d'exemple par la vraie (config Axiobat) si fournie.
@@ -79,7 +85,8 @@ namespace API.CONTROLLERS
             }
 
             var tableStyle = request?.TableStyle ?? template.TableStyle;
-            var pdf = await _render.RenderFileAsync(mrtPath, template.SocieteId, sampleJson, request?.ConfigJson, tableStyle);
+            var pdf = await _render.RenderFileAsync(mrtPath, template.SocieteId, sampleJson, request?.ConfigJson, tableStyle,
+                request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight);
             return File(pdf, "application/pdf", $"preview-{template.DocType}.pdf");
         }
     }

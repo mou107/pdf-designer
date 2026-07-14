@@ -49,7 +49,9 @@
         "prixUnitaire": 450,
         "remise": 0,
         "tva": 10,
-        "totalHT": 450
+        "totalHT": 450,
+        "totalTTC": 495,
+        "vignette": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAJUlEQVR4nGPQqLijUXHnPxgQw2YgWQPxSiFs0jWM+mHUD1TyAwCAZDyfPzU7hQAAAABJRU5ErkJggg=="
       },
       {
         "type": "article",
@@ -60,7 +62,9 @@
         "prixUnitaire": 890,
         "remise": 5,
         "tva": 10,
-        "totalHT": 845.5
+        "totalHT": 845.5,
+        "totalTTC": 930.05,
+        "vignette": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAJUlEQVR4nGPQqLijUXHnPxgQw2YgWQPxSiFs0jWM+mHUD1TyAwCAZDyfPzU7hQAAAABJRU5ErkJggg=="
       },
       {
         "type": "lot",
@@ -82,7 +86,9 @@
         "prixUnitaire": 65,
         "remise": 0,
         "tva": 10,
-        "totalHT": 780
+        "totalHT": 780,
+        "totalTTC": 858,
+        "vignette": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAJUlEQVR4nGPQqLijUXHnPxgQw2YgWQPxSiFs0jWM+mHUD1TyAwCAZDyfPzU7hQAAAABJRU5ErkJggg=="
       },
       {
         "type": "article",
@@ -93,7 +99,9 @@
         "prixUnitaire": 40,
         "remise": 0,
         "tva": 10,
-        "totalHT": 760
+        "totalHT": 760,
+        "totalTTC": 836,
+        "vignette": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAJUlEQVR4nGPQqLijUXHnPxgQw2YgWQPxSiFs0jWM+mHUD1TyAwCAZDyfPzU7hQAAAABJRU5ErkJggg=="
       }
     ],
     "totaux": {

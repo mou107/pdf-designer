@@ -27,6 +27,7 @@ namespace API.CORE.Services
         private readonly ConcurrentDictionary<string, SocieteAssets> _assets = new();
 
         public const string LogoComponentName = "SocieteLogo";
+        public const string CachetComponentName = "SocieteCachet";
 
         public void Set(string societeId, SocieteAssets assets)
         {
@@ -51,6 +52,14 @@ namespace API.CORE.Services
                 logoImage.AspectRatio = true;
             }
 
+            var cachet = LoadImage(assets.Cachet);
+            if (cachet != null && report.GetComponentByName(CachetComponentName) is StiImage cachetImage)
+            {
+                cachetImage.Image = cachet;
+                cachetImage.Stretch = true;
+                cachetImage.AspectRatio = true;
+            }
+
             var background = LoadImage(assets.Background);
             if (background != null)
             {
@@ -61,6 +70,22 @@ namespace API.CORE.Services
                     page.Watermark.ImageTransparency = 0;
                 }
             }
+        }
+
+        // 1 px CSS (96 dpi) = 2.54/96 cm ; les .mrt sont en centimetres.
+        private const double PxToCm = 2.54 / 96.0;
+
+        /// <summary>
+        /// Redimensionne la boite d'un composant image (logo/cachet) selon des dimensions en pixels (axes > 0
+        /// seulement). Appele au rendu APRES <see cref="Apply"/> : la taille vient de la config du template
+        /// (requete de rendu), pas de l'asset stocke.
+        /// </summary>
+        public static void ApplyImageDimensions(StiReport report, string componentName, double? widthPx, double? heightPx)
+        {
+            if (widthPx is not > 0 && heightPx is not > 0) return;
+            if (report.GetComponentByName(componentName) is not StiComponent comp) return;
+            if (widthPx is > 0) comp.Width = widthPx.Value * PxToCm;
+            if (heightPx is > 0) comp.Height = heightPx.Value * PxToCm;
         }
 
         private static Stimulsoft.Drawing.Image? LoadImage(string? base64)

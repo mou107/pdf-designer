@@ -49,7 +49,17 @@ namespace API.CONTROLLERS
         public IActionResult Get()
         {
             var a = _assets.Get(_tenant.SocieteId);
-            return Ok(new { hasLogo = !string.IsNullOrEmpty(a?.Logo), hasBackground = !string.IsNullOrEmpty(a?.Background) });
+            // Renvoie les assets reels (logo/cachet/fond/couleur) pour que le webadmin puisse les afficher
+            // dans l'ecran de config meme quand l'API Axiobat (token strict) n'est pas joignable.
+            return Ok(new
+            {
+                hasLogo = !string.IsNullOrEmpty(a?.Logo),
+                hasBackground = !string.IsNullOrEmpty(a?.Background),
+                logo = a?.Logo,
+                cachet = a?.Cachet,
+                background = a?.Background,
+                mainColor = a?.MainColor
+            });
         }
     }
 }

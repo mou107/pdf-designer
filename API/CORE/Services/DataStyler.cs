@@ -14,12 +14,14 @@ namespace API.CORE.Services
         public static string AddDesignationHtml(string dataJson, string? configJson)
         {
             JsonObject? lineStyles = null;
+            var numColumn = false; // colonne N° affichee separement -> ne pas prefixer le numero dans la designation
             if (!string.IsNullOrWhiteSpace(configJson))
             {
                 try
                 {
                     var cfg = JsonNode.Parse(configJson)?.AsObject();
                     lineStyles = cfg?["lineStyles"]?.AsObject();
+                    numColumn = IsTrue(cfg?["cols"]?["num"]);
                 }
                 catch { /* defauts */ }
             }
@@ -36,7 +38,7 @@ namespace API.CORE.Services
                     var type = ligne["type"]?.ToString() ?? "";
                     var numero = ligne["numero"]?.ToString() ?? "";
                     var designation = ligne["designation"]?.ToString() ?? "";
-                    var text = string.IsNullOrEmpty(numero) ? designation : $"{numero}  {designation}";
+                    var text = (numColumn || string.IsNullOrEmpty(numero)) ? designation : $"{numero}  {designation}";
                     ligne["designationHtml"] = Wrap(text, lineStyles, type);
                 }
 

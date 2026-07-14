@@ -40,7 +40,8 @@ namespace API.CORE.Services
             => RenderFileAsync(_storage.GetAbsolutePath(template.FilePath), template.SocieteId, dataJson, configOverride ?? template.ConfigJson, template.TableStyle);
 
         /// <summary>Rend un .mrt arbitraire (chemin absolu) avec le contexte societe (logo, couleur, style de tableau).</summary>
-        public async Task<byte[]> RenderFileAsync(string mrtAbsolutePath, string? societeId, string dataJson, string? configJson, int tableStyle = 0)
+        public async Task<byte[]> RenderFileAsync(string mrtAbsolutePath, string? societeId, string dataJson, string? configJson, int tableStyle = 0,
+            double? logoWidthPx = null, double? logoHeightPx = null, double? cachetWidthPx = null, double? cachetHeightPx = null)
         {
             await _semaphore!.WaitAsync(TimeSpan.FromSeconds(_timeoutSeconds));
             try
@@ -52,8 +53,13 @@ namespace API.CORE.Services
                 // Styles de texte par type de ligne : construits en HTML dans les donnees (robuste).
                 RegisterData(report, DataStyler.AddDesignationHtml(dataJson, configJson));
                 _assets.Apply(report, societeId);
+                // Dimensions logo/cachet (px, config du template) : redimensionnent les boites apres les avoir alimentees.
+                SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.LogoComponentName, logoWidthPx, logoHeightPx);
+                SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.CachetComponentName, cachetWidthPx, cachetHeightPx);
                 // Couleur : config explicite, sinon couleur societe stockee (BDD).
                 PdfConfigApplier.Apply(report, configJson, _assets.Get(societeId)?.MainColor);
+                // Visibilite des colonnes du tableau (config `cols`) : masque + recompacte avant le style de tableau.
+                ColumnsApplier.Apply(report, configJson);
                 TableStyleApplier.Apply(report, tableStyle);
 
                 report.Render(false);

@@ -79,6 +79,7 @@ namespace API.CONTROLLERS
             // mise en page que l'apercu (config PDF de la societe).
             _assets.Apply(report, template.SocieteId);
             PdfConfigApplier.Apply(report, template.ConfigJson, _assets.Get(template.SocieteId)?.MainColor);
+            ColumnsApplier.Apply(report, template.ConfigJson);
             TableStyleApplier.Apply(report, template.TableStyle);
 
             return StiAngularDesigner.GetReportResult(this, report);

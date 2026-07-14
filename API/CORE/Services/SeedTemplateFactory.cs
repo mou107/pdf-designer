@@ -268,7 +268,26 @@ namespace API.CORE.Services
             band.Components.Add(Rect(x + w - th, y + h - len, th, len, gray));
         }
 
-        /// <summary>Tableau des lignes fidele au Devis Axiobat (entete orange, colonnes Designation/Qte/PU/TVA/HT).</summary>
+        /// <summary>
+        /// Colonnes du tableau devis (ordre gauche->droite). La cle pilote la visibilite via la config
+        /// `cols` (voir ColumnsApplier) ; "designation" est la colonne flexible (absorbe la largeur restante).
+        /// Toutes les colonnes sont construites dans le seed ; ColumnsApplier masque/recompacte au rendu.
+        /// </summary>
+        // image=true : cellule StiImage liee a une colonne base64 (vignette article) ; sinon cellule texte.
+        private static readonly (string key, string title, string expr, StiTextHorAlignment align, bool money, bool flex, double w, bool html, bool image)[] QuoteColumns =
+        {
+            ("num",         "N°",          "{lignes.numero}",          StiTextHorAlignment.Left,   false, false, 1.3, false, false),
+            ("vignette",    "Photo",       "lignes.vignette",          StiTextHorAlignment.Center, false, false, 1.8, false, true),
+            ("designation", "Désignation", "{lignes.designationHtml}", StiTextHorAlignment.Left,   false, true,  0.0, true,  false),
+            ("qte",         "Qté",         "{lignes.quantite}",        StiTextHorAlignment.Right,  false, false, 1.5, false, false),
+            ("unite",       "Unité",       "{lignes.unite}",           StiTextHorAlignment.Center, false, false, 1.4, false, false),
+            ("prixU",       "Prix U.",     "{lignes.prixUnitaire}",    StiTextHorAlignment.Right,  true,  false, 2.3, false, false),
+            ("tva",         "TVA",         "{lignes.tva}",             StiTextHorAlignment.Right,  false, false, 1.5, false, false),
+            ("prixHT",      "Prix HT",     "{lignes.totalHT}",         StiTextHorAlignment.Right,  true,  false, 2.6, false, false),
+            ("ttc",         "TTC",         "{lignes.totalTTC}",        StiTextHorAlignment.Right,  true,  false, 2.6, false, false),
+        };
+
+        /// <summary>Tableau des lignes fidele au Devis Axiobat (entete coloree, colonnes pilotees par `cols`).</summary>
         private static void AddQuoteTable(StiPage page)
         {
             var header = new StiHeaderBand { Name = "EnteteLignes", Height = 0.6, PrintOnAllPages = true };
@@ -285,11 +304,18 @@ namespace API.CORE.Services
             });
             data.Components.Add(rowBg);
 
-            AddQuoteColumn(header, data, 0.0, 10.4, "Désignation", "{lignes.designationHtml}", StiTextHorAlignment.Left, cellName: "CellDesignation", allowHtml: true);
-            AddQuoteColumn(header, data, 10.4, 1.6, "Qté", "{lignes.quantite}", StiTextHorAlignment.Right);
-            AddQuoteColumn(header, data, 12.0, 2.4, "Prix U.", "{lignes.prixUnitaire}", StiTextHorAlignment.Right, money: true);
-            AddQuoteColumn(header, data, 14.4, 1.6, "TVA", "{lignes.tva}", StiTextHorAlignment.Right);
-            AddQuoteColumn(header, data, 16.0, 3.0, "Prix HT", "{lignes.totalHT}", StiTextHorAlignment.Right, money: true);
+            // Layout initial « toutes colonnes visibles » ; ColumnsApplier recalcule x/largeurs selon `cols` au rendu.
+            double fixedSum = 0;
+            foreach (var c in QuoteColumns) if (!c.flex) fixedSum += c.w;
+            double flexW = Math.Max(3.0, W - fixedSum);
+
+            double x = 0;
+            foreach (var c in QuoteColumns)
+            {
+                double w = c.flex ? flexW : c.w;
+                AddQuoteColumn(header, data, x, w, c.key, c.title, c.expr, c.align, money: c.money, allowHtml: c.html, image: c.image);
+                x += w;
+            }
 
             page.Components.Add(header);
             page.Components.Add(data);
@@ -298,7 +324,7 @@ namespace API.CORE.Services
         /// <summary>Bloc totaux fidele (Total HT / TVA / Total TTC + Net a payer en bandes couleur societe).</summary>
         private static void AddQuoteTotals(StiPage page)
         {
-            var footer = new StiFooterBand { Name = "Totaux", Height = 4.6, CanShrink = true };
+            var footer = new StiFooterBand { Name = "Totaux", Height = 5.2, CanShrink = true };
 
             footer.Components.Add(Txt(0, 0.4, 9.5, 0.5, "Conditions de règlement", 9, bold: true, color: Dark));
             footer.Components.Add(Txt(0, 0.9, 9.5, 1.4, "{paiement.conditions}\nRIB : {paiement.rib}", 8, color: Color.DimGray));
@@ -329,7 +355,10 @@ namespace API.CORE.Services
             footer.Components.Add(netValue);
 
             footer.Components.Add(Txt(11.5, 3.0, 7.5, 0.5, "{totaux.totalEnLettres}", 8, color: Color.DimGray, align: StiTextHorAlignment.Right));
-            footer.Components.Add(Txt(0, 3.0, 9.5, 0.5, "{options.mentionsSpecifiques}", 8, color: Color.Gray));
+            footer.Components.Add(Txt(0, 3.0, 5.5, 0.9, "{options.mentionsSpecifiques}", 8, color: Color.Gray));
+
+            // Cachet / label societe (optionnel) : boite dans la zone signature, a droite des mentions.
+            AddCachet(footer, 6.0, 3.0, 3.5, 1.9);
 
             page.Components.Add(footer);
         }
@@ -346,14 +375,34 @@ namespace API.CORE.Services
             return pageFooter;
         }
 
-        private static void AddQuoteColumn(StiBand header, StiDataBand data, double x, double w, string title, string expr, StiTextHorAlignment align, bool money = false, string? cellName = null, bool allowHtml = false)
+        // Chaque colonne recoit un Name stable (HCol_{cle} pour l'entete, DCol_{cle} pour la cellule)
+        // afin que ColumnsApplier puisse la masquer/repositionner au rendu selon la config `cols`.
+        private static void AddQuoteColumn(StiBand header, StiDataBand data, double x, double w, string key, string title, string expr, StiTextHorAlignment align, bool money = false, bool allowHtml = false, bool image = false)
         {
             var head = Txt(x, 0.06, w, 0.5, title, 9, bold: true, color: Color.White, align: align);
             head.Brush = new StiSolidBrush(Accent);
+            head.Name = $"HCol_{key}";
             header.Components.Add(head);
 
+            if (image)
+            {
+                // Vignette article : image liee a une colonne base64 (expr = "lignes.<champ>"). Taille de ligne
+                // ajustee par ColumnsApplier quand la colonne est visible.
+                var img = new StiImage(new RectangleD(x + 0.1, 0.05, w - 0.2, 0.4))
+                {
+                    Name = $"DCol_{key}",
+                    Stretch = true,
+                    AspectRatio = true,
+                    HorAlignment = StiHorAlignment.Center,
+                    VertAlignment = StiVertAlignment.Center
+                };
+                img.DataColumn = expr;
+                data.Components.Add(img);
+                return;
+            }
+
             var cell = Txt(x, 0.0, w, 0.5, expr, 8.5f, align: align, color: Dark);
-            if (cellName != null) cell.Name = cellName;
+            cell.Name = $"DCol_{key}";
             if (allowHtml) cell.AllowHtmlTags = true;
             cell.Border = new StiBorder(StiBorderSides.Bottom, AccentLight, 1, StiPenStyle.Solid);
             cell.CanGrow = true;
@@ -478,6 +527,17 @@ namespace API.CORE.Services
             });
         }
 
+        /// <summary>Cachet / label societe (image optionnelle, alimentee par les assets au rendu). Vide si non configure.</summary>
+        private static void AddCachet(StiBand band, double x, double y, double w, double h)
+        {
+            band.Components.Add(new StiImage(new RectangleD(x, y, w, h))
+            {
+                Name = SocieteAssetsService.CachetComponentName,
+                Stretch = true,
+                AspectRatio = true
+            });
+        }
+
         private static void AddDocInfo(StiReportTitleBand band, double x, double y, string docType)
         {
             band.Components.Add(Txt(x, y, 8, 0.6, "{options.titreDocument} {document.reference}", 11, bold: true, color: Dark));
@@ -583,6 +643,9 @@ namespace API.CORE.Services
             var signBox = Box(12.5, 3.9, 6.5, 2.6, "{options.mentionsSpecifiques}", 8, align: StiTextHorAlignment.Center, color: Color.Gray);
             footer.Components.Add(signBox);
 
+            // Cachet / label societe (optionnel) : zone libre bas-gauche.
+            AddCachet(footer, 0, 5.0, 3.5, 1.9);
+
             page.Components.Add(footer);
         }
 
@@ -593,6 +656,8 @@ namespace API.CORE.Services
             footer.Components.Add(Txt(0, 0.8, 10.5, 1.6, "{document.notes}", 8, color: Color.DimGray));
             footer.Components.Add(Txt(12.5, 0.3, 6.5, 0.5, "Recu par (nom, date, signature)", 9, bold: true, align: StiTextHorAlignment.Center, color: Dark));
             footer.Components.Add(Box(12.5, 0.8, 6.5, 3.0, "", 8));
+            // Cachet / label societe (optionnel) : zone libre bas-gauche.
+            AddCachet(footer, 0, 2.5, 3.5, 1.8);
             page.Components.Add(footer);
         }
 
@@ -612,7 +677,7 @@ namespace API.CORE.Services
 
         private static void AddObservationsSignatures(StiPage page)
         {
-            var footer = new StiFooterBand { Name = "ObservationsSignatures", Height = 5.6, CanShrink = true };
+            var footer = new StiFooterBand { Name = "ObservationsSignatures", Height = 7.6, CanShrink = true };
 
             footer.Components.Add(Txt(0, 0.4, W, 0.5, "Observations", 9, bold: true, color: Dark));
             footer.Components.Add(Box(0, 0.9, W, 1.6, "{document.observations}", 9));
@@ -621,6 +686,9 @@ namespace API.CORE.Services
             footer.Components.Add(Box(0, 3.4, 9.2, 2.0, "", 9));
             footer.Components.Add(Txt(9.8, 2.9, 9.2, 0.5, "Signature technicien", 9, bold: true, align: StiTextHorAlignment.Center, color: Dark));
             footer.Components.Add(Box(9.8, 3.4, 9.2, 2.0, "", 9));
+
+            // Cachet / label societe (optionnel) : zone libre sous les signatures.
+            AddCachet(footer, 0, 5.7, 3.5, 1.9);
 
             page.Components.Add(footer);
         }
