@@ -11,7 +11,6 @@ namespace API.CORE.Extensions
             builder.Services.AddScoped<TemplateService>();
             builder.Services.AddScoped<RenderService>();
             builder.Services.AddSingleton<TemplateStorageService>();
-            builder.Services.AddSingleton<SampleDataService>();
             builder.Services.AddSingleton<SocieteAssetsService>();
             builder.Services.AddScoped<SeedService>();
             builder.Services.AddMemoryCache();

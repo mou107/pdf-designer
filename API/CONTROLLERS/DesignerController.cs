@@ -17,14 +17,12 @@ namespace API.CONTROLLERS
     {
         private readonly TemplateService _templates;
         private readonly TemplateStorageService _storage;
-        private readonly SampleDataService _sampleData;
         private readonly SocieteAssetsService _assets;
 
-        public DesignerController(TemplateService templates, TemplateStorageService storage, SampleDataService sampleData, SocieteAssetsService assets)
+        public DesignerController(TemplateService templates, TemplateStorageService storage, SocieteAssetsService assets)
         {
             _templates = templates;
             _storage = storage;
-            _sampleData = sampleData;
             _assets = assets;
         }
 
@@ -71,9 +69,9 @@ namespace API.CONTROLLERS
             report.Load(_storage.GetAbsolutePath(template.FilePath));
             report.ReportName = template.Name;
 
-            // Dictionnaire synchronise sur les donnees exemples du docType : l'utilisateur
+            // Dictionnaire synchronise sur le squelette generique (structure des champs) : l'utilisateur
             // voit les champs disponibles et la preview du designer rend avec ces donnees.
-            var sample = DataStyler.AddDesignationHtml(await _sampleData.GetSampleDataAsync(template.DocType), template.ConfigJson);
+            var sample = DataStyler.AddDesignationHtml(SampleSkeleton.GetJson(template.DocType), template.ConfigJson);
             RenderService.RegisterData(report, sample);
             // Logo + fond + couleur + style de tableau de la societe : le designer affiche la meme
             // mise en page que l'apercu (config PDF de la societe).

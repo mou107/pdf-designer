@@ -72,6 +72,25 @@ namespace API.CORE.Services
             }
         }
 
+        /// <summary>
+        /// Pose (ou efface) le logo et le cachet a partir de base64 fournis dans la requete de rendu — pour
+        /// que l'apercu reflete la societe CONNECTEE, independamment du cache memoire (par societeId).
+        /// null => le composant est vide (societe sans logo/cachet).
+        /// </summary>
+        public static void ApplyAssets(StiReport report, string? logoBase64, string? cachetBase64)
+        {
+            SetComponentImage(report, LogoComponentName, logoBase64);
+            SetComponentImage(report, CachetComponentName, cachetBase64);
+        }
+
+        private static void SetComponentImage(StiReport report, string componentName, string? base64)
+        {
+            if (report.GetComponentByName(componentName) is not StiImage img) return;
+            var image = LoadImage(base64);
+            img.Image = image; // null => efface l'image existante (mise par _assets.Apply)
+            if (image != null) { img.Stretch = true; img.AspectRatio = true; }
+        }
+
         // 1 px CSS (96 dpi) = 2.54/96 cm ; les .mrt sont en centimetres.
         private const double PxToCm = 2.54 / 96.0;
 

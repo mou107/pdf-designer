@@ -10,13 +10,11 @@ namespace API.CONTROLLERS
     {
         private readonly TemplateService _templates;
         private readonly RenderService _render;
-        private readonly SampleDataService _sampleData;
 
-        public RenderController(TemplateService templates, RenderService render, SampleDataService sampleData, ILogger<RenderController> logger)
+        public RenderController(TemplateService templates, RenderService render, ILogger<RenderController> logger)
         {
             _templates = templates;
             _render = render;
-            _sampleData = sampleData;
             _logger = logger;
         }
 
@@ -40,6 +38,9 @@ namespace API.CONTROLLERS
 
         public class PreviewRequest
         {
+            /// <summary>Donnees du document (JSON { document, societe, options }) fournies par l'appelant (Axiobat)
+            /// pour l'apercu. A defaut, un squelette generique en code est utilise (SampleSkeleton).</summary>
+            public string? DataJson { get; set; }
             /// <summary>Config simple courante (couleurs/colonnes) pour l'apercu live pendant l'edition — optionnel.</summary>
             public string? ConfigJson { get; set; }
             /// <summary>Numero de modele a previsualiser (1-7) — bascule de modele dans l'editeur ; a defaut celui du template.</summary>
@@ -53,26 +54,33 @@ namespace API.CONTROLLERS
             public double? LogoHeight { get; set; }
             public double? CachetWidth { get; set; }
             public double? CachetHeight { get; set; }
+            /// <summary>Logo / cachet (base64) de la societe CONNECTEE. Quand OverrideAssets=true, ils remplacent
+            /// l'asset en cache pour l'apercu (null = pas de logo) — garantit que l'apercu reflete la societe courante.</summary>
+            public bool OverrideAssets { get; set; }
+            public string? Logo { get; set; }
+            public string? Cachet { get; set; }
         }
 
         /// <summary>Preversion d'un modele avec les donnees exemples du docType + la config societe (couleurs, logo…).</summary>
         private readonly ILogger<RenderController> _logger;
 
         [HttpPost("preview")]
-        public async Task<IActionResult> Preview([FromQuery] string templateId, [FromBody] PreviewRequest? request = null)
+        public async Task<IActionResult> Preview([FromQuery] string templateId, [FromQuery] bool png = false, [FromBody] PreviewRequest? request = null)
         {
             var template = await _templates.FindReadableAsync(templateId);
             if (template == null) return NotFound();
 
             // Trace de diagnostic : que recoit-on reellement du webadmin ?
-            _logger.LogInformation("PREVIEW model={Model} tableStyle={Table} configLen={Len} config={Config} societeLen={SocLen} logoDim={LW}x{LH} cachetDim={CW}x{CH}",
+            _logger.LogInformation("PREVIEW model={Model} tableStyle={Table} configLen={Len} societeLen={SocLen} DIAG-SOCIETE={Soc}",
                 request?.Model, request?.TableStyle, request?.ConfigJson?.Length ?? 0,
-                request?.ConfigJson?.Length > 400 ? request.ConfigJson.Substring(0, 400) : request?.ConfigJson,
                 request?.SocieteJson?.Length ?? 0,
-                request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight);
+                request?.SocieteJson?.Length > 600 ? request.SocieteJson.Substring(0, 600) : request?.SocieteJson);
 
-            var sampleJson = await _sampleData.GetSampleDataAsync(template.DocType);
-            // Remplace l'identite societe d'exemple par la vraie (config Axiobat) si fournie.
+            // Donnees d'apercu : fournies par l'appelant (Axiobat) ; a defaut, squelette generique en code.
+            var sampleJson = string.IsNullOrWhiteSpace(request?.DataJson)
+                ? SampleSkeleton.GetJson(template.DocType)
+                : request!.DataJson;
+            // Remplace l'identite societe des donnees par la vraie (config Axiobat) si fournie.
             sampleJson = RenderService.MergeSociete(sampleJson, request?.SocieteJson);
 
             // Bascule de modele dans l'editeur : on rend le seed du modele choisi (mise en page 1-7),
@@ -86,8 +94,9 @@ namespace API.CONTROLLERS
 
             var tableStyle = request?.TableStyle ?? template.TableStyle;
             var pdf = await _render.RenderFileAsync(mrtPath, template.SocieteId, sampleJson, request?.ConfigJson, tableStyle,
-                request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight);
-            return File(pdf, "application/pdf", $"preview-{template.DocType}.pdf");
+                request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight,
+                request?.OverrideAssets == true, request?.Logo, request?.Cachet, png);
+            return File(pdf, png ? "image/png" : "application/pdf", png ? $"preview-{template.DocType}.png" : $"preview-{template.DocType}.pdf");
         }
     }
 }

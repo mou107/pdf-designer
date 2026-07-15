@@ -41,7 +41,8 @@ namespace API.CORE.Services
 
         /// <summary>Rend un .mrt arbitraire (chemin absolu) avec le contexte societe (logo, couleur, style de tableau).</summary>
         public async Task<byte[]> RenderFileAsync(string mrtAbsolutePath, string? societeId, string dataJson, string? configJson, int tableStyle = 0,
-            double? logoWidthPx = null, double? logoHeightPx = null, double? cachetWidthPx = null, double? cachetHeightPx = null)
+            double? logoWidthPx = null, double? logoHeightPx = null, double? cachetWidthPx = null, double? cachetHeightPx = null,
+            bool overrideAssets = false, string? logoOverride = null, string? cachetOverride = null, bool asPng = false)
         {
             await _semaphore!.WaitAsync(TimeSpan.FromSeconds(_timeoutSeconds));
             try
@@ -50,9 +51,15 @@ namespace API.CORE.Services
                 var report = StiReport.CreateNewReport();
                 report.Load(mrtAbsolutePath);
 
-                // Styles de texte par type de ligne : construits en HTML dans les donnees (robuste).
-                RegisterData(report, DataStyler.AddDesignationHtml(dataJson, configJson));
+                // Styles de texte par type de ligne (designationHtml) + options « Divers » (bloc client, affaire,
+                // adresse intervention) construits dans les donnees selon la config.
+                var styledData = DataStyler.AddDesignationHtml(dataJson, configJson);
+                styledData = DiversStyler.Apply(styledData, configJson);
+                RegisterData(report, styledData);
                 _assets.Apply(report, societeId);
+                // Apercu : le logo/cachet de la societe CONNECTEE viennent de la requete et remplacent le cache
+                // (evite d'afficher le logo d'une societe precedente ; null = pas de logo pour cette societe).
+                if (overrideAssets) SocieteAssetsService.ApplyAssets(report, logoOverride, cachetOverride);
                 // Dimensions logo/cachet (px, config du template) : redimensionnent les boites apres les avoir alimentees.
                 SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.LogoComponentName, logoWidthPx, logoHeightPx);
                 SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.CachetComponentName, cachetWidthPx, cachetHeightPx);
@@ -60,12 +67,27 @@ namespace API.CORE.Services
                 PdfConfigApplier.Apply(report, configJson, _assets.Get(societeId)?.MainColor);
                 // Visibilite des colonnes du tableau (config `cols`) : masque + recompacte avant le style de tableau.
                 ColumnsApplier.Apply(report, configJson);
+                // Options « Divers » : normalise les bindings identite client vers les variables calculees,
+                // pour que Divers pilote le bloc client meme sur un .mrt personnalise dans l'editeur avance.
+                DiversApplier.Apply(report);
                 TableStyleApplier.Apply(report, tableStyle);
 
                 report.Render(false);
 
                 using var stream = new MemoryStream();
-                report.ExportDocument(StiExportFormat.Pdf, stream);
+                if (asPng) // DIAG : export image pour inspection visuelle.
+                {
+                    var img = new Stimulsoft.Report.Export.StiImageExportSettings
+                    {
+                        ImageResolution = 120,
+                        PageRange = new Stimulsoft.Report.StiPagesRange(1)
+                    };
+                    report.ExportDocument(StiExportFormat.ImagePng, stream, img);
+                }
+                else
+                {
+                    report.ExportDocument(StiExportFormat.Pdf, stream);
+                }
 
                 _logger.LogInformation("Rendu PDF societe={SocieteId} en {Elapsed}ms ({Size} octets)",
                     societeId, stopwatch.ElapsedMilliseconds, stream.Length);

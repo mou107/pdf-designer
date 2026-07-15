@@ -32,14 +32,12 @@ namespace API.CORE.Services
 
         private readonly AppDbContext _db;
         private readonly TemplateStorageService _storage;
-        private readonly SampleDataService _sampleData;
         private readonly ILogger<SeedService> _logger;
 
-        public SeedService(AppDbContext db, TemplateStorageService storage, SampleDataService sampleData, ILogger<SeedService> logger)
+        public SeedService(AppDbContext db, TemplateStorageService storage, ILogger<SeedService> logger)
         {
             _db = db;
             _storage = storage;
-            _sampleData = sampleData;
             _logger = logger;
         }
 
@@ -52,7 +50,7 @@ namespace API.CORE.Services
                     .Select(t => t.Name)
                     .ToListAsync();
 
-                var sampleJson = await _sampleData.GetSampleDataAsync(docType);
+                var sampleJson = SampleSkeleton.GetJson(docType);
                 var maxModel = DocTypes.SingleModel.Contains(docType) ? 1 : ModelCount;
 
                 for (var model = 1; model <= maxModel; model++)
@@ -102,16 +100,16 @@ namespace API.CORE.Services
             if (seed != null && _storage.Exists(seed.FilePath))
                 return await _storage.ReadAsync(seed.FilePath);
 
-            var report = SeedTemplateFactory.Build(model, docType, Labels[docType], await _sampleData.GetSampleDataAsync(docType));
+            var report = SeedTemplateFactory.Build(model, docType, Labels[docType], SampleSkeleton.GetJson(docType));
             return report.SaveToString();
         }
 
-        public async Task<string> BuildBlankMrtAsync(string docType)
+        public Task<string> BuildBlankMrtAsync(string docType)
         {
             var report = StiReport.CreateNewReport();
             report.ReportName = $"{Labels[docType]} — vierge";
-            RenderService.RegisterData(report, await _sampleData.GetSampleDataAsync(docType));
-            return report.SaveToString();
+            RenderService.RegisterData(report, SampleSkeleton.GetJson(docType));
+            return Task.FromResult(report.SaveToString());
         }
     }
 }

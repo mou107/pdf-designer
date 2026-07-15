@@ -41,6 +41,11 @@ namespace API.CORE.Services
 
         private static void StyleData(StiBand band, int style)
         {
+            // Style 1 = grille sans trame : on neutralise l'alternance (EvenStyle) posee en amont,
+            // sinon les lignes paires gardent une couleur alors que les impaires sont blanches.
+            if (style == 1 && band is StiDataBand dataBand)
+                dataBand.EvenStyle = string.Empty;
+
             foreach (StiComponent comp in band.Components)
             {
                 if (comp is not StiText t) continue;

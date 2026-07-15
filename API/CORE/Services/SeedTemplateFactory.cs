@@ -117,20 +117,20 @@ namespace API.CORE.Services
 
             // Bloc client a crochets d'angle (droite)
             band.Components.Add(Txt(11.3, 4.0, 6.5, 1.8,
-                "{client.civilite} {client.nom}\nTVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}",
+                "{client.blocClient}",
                 8.5f, color: Dark));
             AddCornerBrackets(band, 10.7, 3.7, 8.0, 2.1);
 
             // Adresse d'intervention + affaire suivie par
-            band.Components.Add(Txt(0, 6.3, W, 0.5, "Adresse d'intervention : {adresseChantier.rue} {adresseChantier.codePostal} {adresseChantier.ville} {adresseChantier.pays}", 9, bold: true, color: Dark));
-            band.Components.Add(Txt(0, 6.8, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            band.Components.Add(Txt(0, 6.3, W, 0.5, "{client.adresseInter}", 9, bold: true, color: Dark));
+            band.Components.Add(Txt(0, 6.8, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
 
             return band;
         }
 
         // Expressions communes aux entetes Devis
         private const string SocieteExpr = "{societe.nom}\n{adresse.rue}\n{adresse.codePostal} {adresse.ville}\nTél : {societe.telephone}\nEmail : {societe.email}";
-        private const string ClientExpr = "{client.civilite} {client.nom}\nTVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}";
+        private const string ClientExpr = "{client.blocClient}";
         private const string DateCreation = "{document.dateCreation.ToString(\"dd-MM-yyyy\")}";
         private const string DateValidite = "{document.dateValidite.ToString(\"dd-MM-yyyy\")}";
         private const string DevisInfoExpr = "Devis\nDate de création : " + DateCreation + "\nFin validité : " + DateValidite;
@@ -141,9 +141,9 @@ namespace API.CORE.Services
         {
             var band = new StiReportTitleBand { Name = "Entete", Height = 5.6, CanShrink = false };
             AddLabeledBlock(band, 0, 1.8, 8.0, "Devis", "Date de création : " + DateCreation + "\nFin validité : " + DateValidite);
-            AddLabeledBlock(band, 10.5, 1.8, 8.0, "{client.civilite} {client.nom}", "TVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}");
-            AddLabeledBlock(band, 10.5, 3.4, 8.0, "Adresse d'intervention :", "{adresseChantier.rue}\n{adresseChantier.codePostal} {adresseChantier.ville} {adresseChantier.pays}");
-            band.Components.Add(Txt(0, 5.0, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            AddLabeledBlock(band, 10.5, 1.8, 8.0, "{client.blocClient}", "");
+            AddLabeledBlock(band, 10.5, 3.4, 8.0, "{client.adresseInter}", "");
+            band.Components.Add(Txt(0, 5.0, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
             return band;
         }
 
@@ -152,9 +152,9 @@ namespace API.CORE.Services
         {
             var band = new StiReportTitleBand { Name = "Entete", Height = 6.0, CanShrink = false };
             AddLabeledBlock(band, 10.5, 1.2, 8.0, "Devis", "Date de création : " + DateCreation + "\nFin validité : " + DateValidite);
-            AddLabeledBlock(band, 10.5, 2.8, 8.0, "{client.civilite} {client.nom}", "TVA Intra : {client.siret}\n{adresseFacturation.codePostal} {adresseFacturation.ville}");
-            AddLabeledBlock(band, 10.5, 4.2, 8.0, "Adresse d'intervention :", "{adresseChantier.rue}\n{adresseChantier.codePostal} {adresseChantier.ville} {adresseChantier.pays}");
-            band.Components.Add(Txt(0, 5.5, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            AddLabeledBlock(band, 10.5, 2.8, 8.0, "{client.blocClient}", "");
+            AddLabeledBlock(band, 10.5, 4.2, 8.0, "{client.adresseInter}", "");
+            band.Components.Add(Txt(0, 5.5, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
             return band;
         }
 
@@ -168,11 +168,9 @@ namespace API.CORE.Services
         /// <summary>Pied de page discret (modeles sobres 5/6) : filet gris + mentions, pas de bande couleur.</summary>
         private static StiPageFooterBand BuildQuotePlainFooter()
         {
-            var band = new StiPageFooterBand { Name = "PiedDePage", Height = 1.1 };
+            var band = new StiPageFooterBand { Name = "PiedDePage", Height = 1.5 };
             band.Components.Add(Rect(0, 0.1, W, 0.02, Color.Silver));
-            band.Components.Add(Txt(0, 0.2, 16, 0.8,
-                "{societe.nom} — {adresse.rue}, {adresse.codePostal} {adresse.ville} — Tél : {societe.telephone}\n{societe.mentionsLegales} — TVA : {societe.tvaIntracommunautaire}",
-                7, color: Color.Gray));
+            band.Components.Add(Txt(0, 0.2, 16, 1.2, "{societe.pied}", 7, color: Color.Gray));
             band.Components.Add(Txt(16.2, 0.3, 2.8, 0.5, "Page {PageNumber} / {TotalPageCount}", 8, color: Color.Gray, align: StiTextHorAlignment.Right));
             return band;
         }
@@ -187,7 +185,7 @@ namespace API.CORE.Services
             band.Components.Add(LightBox(0, 3.3, 7.5, 1.3, DevisInfoExpr));
             band.Components.Add(LightBox(11, 3.3, 8, 1.5, ClientExpr));
             band.Components.Add(LightBox(11, 5.0, 8, 1.3, AdresseInterExpr));
-            band.Components.Add(Txt(0, 6.7, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            band.Components.Add(Txt(0, 6.7, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
             return band;
         }
 
@@ -201,7 +199,7 @@ namespace API.CORE.Services
             AddBorderBlock(band, 0, 3.3, 7.5, 1.3, DevisInfoExpr);
             AddBorderBlock(band, 10.5, 3.3, 8.0, 1.4, ClientExpr);
             AddBorderBlock(band, 10.5, 4.9, 8.0, 1.3, AdresseInterExpr);
-            band.Components.Add(Txt(0, 6.6, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            band.Components.Add(Txt(0, 6.6, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
             return band;
         }
 
@@ -215,7 +213,7 @@ namespace API.CORE.Services
             AddBorderBlock(band, 0, 3.1, 8.5, 1.8, SocieteExpr);
             AddBorderBlock(band, 10.5, 3.1, 8.0, 1.4, ClientExpr);
             AddBorderBlock(band, 10.5, 4.7, 8.0, 1.3, AdresseInterExpr);
-            band.Components.Add(Txt(0, 6.5, W, 0.5, "Affaire suivie par : {client.email}", 9, bold: true, color: Dark));
+            band.Components.Add(Txt(0, 6.5, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
             return band;
         }
 
@@ -366,11 +364,9 @@ namespace API.CORE.Services
         /// <summary>Pied de page legal fidele (bande couleur societe : coordonnees + mentions legales).</summary>
         private static StiPageFooterBand BuildQuotePageFooter()
         {
-            var pageFooter = new StiPageFooterBand { Name = "PiedDePage", Height = 1.3 };
-            pageFooter.Components.Add(Rect(0, 0.15, W, 1.0, Accent));
-            pageFooter.Components.Add(Txt(0.4, 0.28, 15.5, 0.85,
-                "{societe.nom} — {adresse.rue}, {adresse.codePostal} {adresse.ville} — Tel : {societe.telephone} — {societe.email}\n{societe.mentionsLegales} — TVA : {societe.tvaIntracommunautaire}",
-                7, color: Color.White, transparent: true));
+            var pageFooter = new StiPageFooterBand { Name = "PiedDePage", Height = 1.7 };
+            pageFooter.Components.Add(Rect(0, 0.15, W, 1.4, Accent));
+            pageFooter.Components.Add(Txt(0.4, 0.25, 15.5, 1.25, "{societe.pied}", 7, color: Color.White, transparent: true));
             pageFooter.Components.Add(Txt(16.2, 0.4, 2.8, 0.6, "Page {PageNumber} / {TotalPageCount}", 8, color: Color.White, align: StiTextHorAlignment.Right, transparent: true));
             return pageFooter;
         }
@@ -561,7 +557,7 @@ namespace API.CORE.Services
         {
             var expr = isSupplier
                 ? "{fournisseur.nom}\n{adresse.rue}\n{adresse.codePostal} {adresse.ville}\nTel : {fournisseur.telephone}"
-                : "{client.civilite} {client.nom}\n{adresseFacturation.rue}\n{adresseFacturation.codePostal} {adresseFacturation.ville}\nTel : {client.telephone}";
+                : "{client.blocClient}";
             var text = Txt(x, y, w, 2.0, expr, 9, color: Dark);
             text.Font = new Stimulsoft.Drawing.Font("Arial", 9, FontStyle.Bold);
             return text;
@@ -697,21 +693,21 @@ namespace API.CORE.Services
 
         private static StiPageFooterBand BuildPageFooter(int model)
         {
-            var band = new StiPageFooterBand { Name = "PiedDePage", Height = 1.2 };
-            var mentions = "{societe.nom} — {societe.mentionsLegales} — SIRET : {societe.siret} — TVA : {societe.tvaIntracommunautaire}";
+            var band = new StiPageFooterBand { Name = "PiedDePage", Height = 1.7 };
+            var mentions = "{societe.pied}";
 
             if (model == 5 || model == 6)
             {
                 band.Components.Add(Rect(0, 0.1, W, 0.03, Color.Silver));
-                band.Components.Add(Txt(0, 0.25, 16, 0.9, mentions, 7, color: Color.Gray));
+                band.Components.Add(Txt(0, 0.25, 16, 1.25, mentions, 7, color: Color.Gray));
             }
             else
             {
                 if (model == 1)
-                    band.Components.Add(RoundedRect(0, 0.15, W, 0.9, Accent));
+                    band.Components.Add(RoundedRect(0, 0.15, W, 1.4, Accent));
                 else
-                    band.Components.Add(Rect(0, 0.15, W, 0.9, Accent));
-                band.Components.Add(Txt(0.4, 0.35, 15.6, 0.6, mentions, 7, color: Color.White, transparent: true));
+                    band.Components.Add(Rect(0, 0.15, W, 1.4, Accent));
+                band.Components.Add(Txt(0.4, 0.28, 15.6, 1.25, mentions, 7, color: Color.White, transparent: true));
             }
 
             band.Components.Add(Txt(16.2, 0.35, 2.8, 0.6,
