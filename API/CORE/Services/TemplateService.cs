@@ -35,15 +35,49 @@ namespace API.CORE.Services
 
             var items = await query.ToListAsync();
 
-            // Ordre : templates de la societe d'abord (defaut en tete), puis les modeles standards par numero.
+            // Pointeurs "par defaut" de la societe (peuvent viser un seed) : source de verite du defaut.
+            var defaultIds = await ResolveDefaultTemplateIdsAsync(items, docType);
+
+            // Ordre : le defaut d'abord (meme si c'est un seed), puis templates de la societe,
+            // puis les modeles standards par numero.
             var ordered = items
-                .OrderBy(t => t.SocieteId == null ? 1 : 0)
-                .ThenByDescending(t => t.SocieteId != null && t.IsDefault)
+                .OrderByDescending(t => defaultIds.Contains(t.Id))
+                .ThenBy(t => t.SocieteId == null ? 1 : 0)
                 .ThenBy(t => t.SocieteId == null ? t.Model : 0)
                 .ThenBy(t => t.Name)
                 .ToList();
 
-            return ordered.Select(ToModel).ToList();
+            return ordered.Select(t => ToModel(t, defaultIds.Contains(t.Id))).ToList();
+        }
+
+        /// <summary>
+        /// Determine, par type de document, l'Id du template par defaut de la societe : pointeur explicite
+        /// (societe ou seed) si present, sinon repli sur l'ancien flag IsDefault d'un template de la societe.
+        /// </summary>
+        private async Task<HashSet<string>> ResolveDefaultTemplateIdsAsync(List<ReportTemplate> items, string? docType)
+        {
+            var pointerQuery = _db.SocieteDefaultTemplates.Where(p => p.SocieteId == _tenant.SocieteId);
+            if (!string.IsNullOrWhiteSpace(docType))
+                pointerQuery = pointerQuery.Where(p => p.DocType == docType);
+            var pointers = (await pointerQuery.ToListAsync())
+                .GroupBy(p => p.DocType)
+                .ToDictionary(g => g.Key, g => g.First().TemplateId);
+
+            var result = new HashSet<string>();
+            foreach (var group in items.GroupBy(t => t.DocType))
+            {
+                if (pointers.TryGetValue(group.Key, out var pointedId) && group.Any(t => t.Id == pointedId))
+                {
+                    result.Add(pointedId);
+                }
+                else
+                {
+                    // Retrocompatibilite : pas de pointeur -> ancien flag IsDefault d'un template societe.
+                    var legacy = group.FirstOrDefault(t => t.SocieteId == _tenant.SocieteId && t.IsDefault && t.IsActive);
+                    if (legacy != null) result.Add(legacy.Id);
+                }
+            }
+            return result;
         }
 
         public async Task<ReportTemplate?> FindOwnedAsync(string id)
@@ -59,7 +93,10 @@ namespace API.CORE.Services
         /// <summary>Chemin absolu du .mrt d'un template (pour le rendu direct).</summary>
         public string GetAbsolutePath(ReportTemplate template) => _storage.GetAbsolutePath(template.FilePath);
 
-        /// <summary>Resout le template de rendu : id explicite -> defaut societe -> seed global du docType.</summary>
+        /// <summary>
+        /// Resout le template de rendu : id explicite -> pointeur "par defaut" de la societe (societe OU seed)
+        /// -> ancien flag IsDefault (retrocompat) -> seed global du docType.
+        /// </summary>
         public async Task<ReportTemplate?> ResolveForRenderAsync(string docType, string? templateId)
         {
             if (!string.IsNullOrWhiteSpace(templateId))
@@ -68,12 +105,26 @@ namespace API.CORE.Services
                 if (explicitTemplate != null) return explicitTemplate;
             }
 
+            // Pointeur "par defaut" de la societe : peut viser un modele societe ou un seed global.
+            var pointer = await _db.SocieteDefaultTemplates
+                .FirstOrDefaultAsync(p => p.SocieteId == _tenant.SocieteId && p.DocType == docType);
+            if (pointer != null)
+            {
+                var pointed = await _db.ReportTemplates.FirstOrDefaultAsync(t =>
+                    t.Id == pointer.TemplateId && t.IsActive
+                    && (t.SocieteId == _tenant.SocieteId || t.SocieteId == null));
+                if (pointed != null) return pointed;
+            }
+
+            // Retrocompatibilite : ancien defaut porte par le flag IsDefault d'un template societe.
             var byDefault = await _db.ReportTemplates.FirstOrDefaultAsync(t =>
                 t.SocieteId == _tenant.SocieteId && t.DocType == docType && t.IsDefault && t.IsActive);
             if (byDefault != null) return byDefault;
 
-            return await _db.ReportTemplates.FirstOrDefaultAsync(t =>
-                t.SocieteId == null && t.DocType == docType && t.IsActive);
+            return await _db.ReportTemplates
+                .Where(t => t.SocieteId == null && t.DocType == docType && t.IsActive)
+                .OrderBy(t => t.Model)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<TemplateModel> CreateAsync(CreateTemplateRequest request, string seedMrtContent)
@@ -103,15 +154,28 @@ namespace API.CORE.Services
 
             await _storage.WriteAsync(template.FilePath, content);
 
-            // Premier modele du docType pour cette societe -> defaut automatiquement
-            var hasDefault = await _db.ReportTemplates.AnyAsync(t =>
-                t.SocieteId == _tenant.SocieteId && t.DocType == template.DocType && t.IsDefault && t.IsActive);
-            template.IsDefault = !hasDefault;
+            // Defaut automatique uniquement si la societe n'a AUCUN defaut pour ce docType : ni pointeur
+            // (modele societe ou seed choisi explicitement), ni ancien flag IsDefault.
+            var hasPointer = await _db.SocieteDefaultTemplates
+                .AnyAsync(p => p.SocieteId == _tenant.SocieteId && p.DocType == template.DocType);
+            var hasLegacyDefault = await _db.ReportTemplates
+                .AnyAsync(t => t.SocieteId == _tenant.SocieteId && t.DocType == template.DocType && t.IsDefault && t.IsActive);
+            template.IsDefault = !hasPointer && !hasLegacyDefault;
 
             _db.ReportTemplates.Add(template);
             _db.ReportTemplateVersions.Add(NewVersion(template));
+            if (template.IsDefault)
+            {
+                _db.SocieteDefaultTemplates.Add(new SocieteDefaultTemplate
+                {
+                    SocieteId = _tenant.SocieteId!,
+                    DocType = template.DocType,
+                    TemplateId = template.Id,
+                    UpdatedBy = _tenant.UserId
+                });
+            }
             await _db.SaveChangesAsync();
-            return ToModel(template);
+            return ToModel(template, template.IsDefault);
         }
 
         public async Task<TemplateModel> DuplicateAsync(ReportTemplate source)
@@ -211,22 +275,44 @@ namespace API.CORE.Services
             return (applied, skipped);
         }
 
+        /// <summary>
+        /// Definit le modele par defaut de la societe pour un type de document. Le template peut etre
+        /// un modele de la societe OU un modele standard global (seed) — aucune duplication requise.
+        /// Le choix est porte par un pointeur (societe, docType) ; l'ancien flag IsDefault des modeles
+        /// societe est maintenu synchronise pour la retrocompatibilite.
+        /// </summary>
         public async Task SetDefaultAsync(ReportTemplate template)
         {
-            var currentDefaults = await _db.ReportTemplates
-                .Where(t => t.SocieteId == _tenant.SocieteId && t.DocType == template.DocType && t.IsDefault)
-                .ToListAsync();
-            foreach (var current in currentDefaults) current.IsDefault = false;
+            if (string.IsNullOrWhiteSpace(_tenant.SocieteId))
+                throw new InvalidOperationException("Aucune societe courante : impossible de definir un modele par defaut.");
 
-            template.IsDefault = true;
-            template.UpdatedAt = DateTime.UtcNow;
-            template.UpdatedBy = _tenant.UserId;
+            // Upsert du pointeur (un seul defaut par societe + docType).
+            var pointer = await _db.SocieteDefaultTemplates
+                .FirstOrDefaultAsync(p => p.SocieteId == _tenant.SocieteId && p.DocType == template.DocType);
+            if (pointer == null)
+            {
+                pointer = new SocieteDefaultTemplate { SocieteId = _tenant.SocieteId!, DocType = template.DocType };
+                _db.SocieteDefaultTemplates.Add(pointer);
+            }
+            pointer.TemplateId = template.Id;
+            pointer.UpdatedAt = DateTime.UtcNow;
+            pointer.UpdatedBy = _tenant.UserId;
+
+            // Synchronise l'ancien flag IsDefault sur les modeles de la societe : vrai uniquement si le
+            // defaut choisi est un modele de la societe (un seed reste global, jamais marque en base).
+            var owned = await _db.ReportTemplates
+                .Where(t => t.SocieteId == _tenant.SocieteId && t.DocType == template.DocType)
+                .ToListAsync();
+            foreach (var t in owned) t.IsDefault = t.Id == template.Id;
+
             await _db.SaveChangesAsync();
         }
 
         public async Task SoftDeleteAsync(ReportTemplate template)
         {
-            if (template.IsDefault)
+            var isPointedDefault = await _db.SocieteDefaultTemplates.AnyAsync(p =>
+                p.SocieteId == _tenant.SocieteId && p.DocType == template.DocType && p.TemplateId == template.Id);
+            if (template.IsDefault || isPointedDefault)
                 throw new InvalidOperationException("Impossible de supprimer le modele par defaut. Definissez d'abord un autre modele par defaut.");
             template.IsActive = false;
             template.UpdatedAt = DateTime.UtcNow;
@@ -268,14 +354,15 @@ namespace API.CORE.Services
             CreatedBy = _tenant.UserId
         };
 
-        private static TemplateModel ToModel(ReportTemplate t) => new()
+        /// <param name="isDefault">Defaut effectif (pointeur societe/seed) ; a defaut, le flag stocke.</param>
+        private static TemplateModel ToModel(ReportTemplate t, bool? isDefault = null) => new()
         {
             Id = t.Id,
             SocieteId = t.SocieteId,
             DocType = t.DocType,
             Name = t.Name,
             Description = t.Description,
-            IsDefault = t.IsDefault,
+            IsDefault = isDefault ?? t.IsDefault,
             IsActive = t.IsActive,
             IsSeed = t.SocieteId == null,
             Model = t.Model,

@@ -1,3 +1,4 @@
+using API.CORE.Middlewares;
 using API.CORE.Services;
 using Microsoft.AspNetCore.Mvc;
 using Stimulsoft.Report;
@@ -18,12 +19,14 @@ namespace API.CONTROLLERS
         private readonly TemplateService _templates;
         private readonly TemplateStorageService _storage;
         private readonly SocieteAssetsService _assets;
+        private readonly TenantContext _tenant;
 
-        public DesignerController(TemplateService templates, TemplateStorageService storage, SocieteAssetsService assets)
+        public DesignerController(TemplateService templates, TemplateStorageService storage, SocieteAssetsService assets, TenantContext tenant)
         {
             _templates = templates;
             _storage = storage;
             _assets = assets;
+            _tenant = tenant;
         }
 
         [HttpGet]
@@ -74,9 +77,13 @@ namespace API.CONTROLLERS
             var sample = DataStyler.AddDesignationHtml(SampleSkeleton.GetJson(template.DocType), template.ConfigJson);
             RenderService.RegisterData(report, sample);
             // Logo + fond + couleur + style de tableau de la societe : le designer affiche la meme
-            // mise en page que l'apercu (config PDF de la societe).
-            _assets.Apply(report, template.SocieteId);
-            PdfConfigApplier.Apply(report, template.ConfigJson, _assets.Get(template.SocieteId)?.MainColor);
+            // mise en page que l'apercu (config PDF de la societe). On resout la societe comme au rendu
+            // (RenderService) : tenant courant en priorite, repli sur le proprietaire du template. Sinon
+            // les assets pousses sous _tenant.SocieteId (dont le papier entete) sont introuvables ici —
+            // notamment pour un seed (SocieteId null) — et le fond n'apparait pas dans le designer.
+            var assetSocieteId = string.IsNullOrWhiteSpace(_tenant.SocieteId) ? template.SocieteId : _tenant.SocieteId;
+            _assets.Apply(report, assetSocieteId);
+            PdfConfigApplier.Apply(report, template.ConfigJson, _assets.Get(assetSocieteId)?.MainColor);
             ColumnsApplier.Apply(report, template.ConfigJson);
             TableStyleApplier.Apply(report, template.TableStyle);
 

@@ -97,5 +97,16 @@ namespace API.CORE.Schemas
         public JsonElement? Document { get; set; }
         public JsonElement? Societe { get; set; }
         public JsonElement? Options { get; set; }
+        /// <summary>Assets societe (logo/cachet/papier entete/couleur) fournis dans la requete — rendu sans etat.</summary>
+        public RenderAssets? Assets { get; set; }
+    }
+
+    /// <summary>Assets societe passes au rendu (base64/hex) — remplacent le cache memoire du microservice.</summary>
+    public class RenderAssets
+    {
+        public string? Logo { get; set; }
+        public string? Cachet { get; set; }
+        public string? Background { get; set; }
+        public string? MainColor { get; set; }
     }
 }

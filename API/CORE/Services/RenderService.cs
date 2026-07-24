@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using API.CORE.Middlewares;
 using API.CORE.Schemas;
 using API.DATABASE.Entities;
 using Stimulsoft.Base;
@@ -17,13 +18,15 @@ namespace API.CORE.Services
         private static SemaphoreSlim? _semaphore;
         private readonly TemplateStorageService _storage;
         private readonly SocieteAssetsService _assets;
+        private readonly TenantContext _tenant;
         private readonly ILogger<RenderService> _logger;
         private readonly int _timeoutSeconds;
 
-        public RenderService(TemplateStorageService storage, SocieteAssetsService assets, IConfiguration configuration, ILogger<RenderService> logger)
+        public RenderService(TemplateStorageService storage, SocieteAssetsService assets, TenantContext tenant, IConfiguration configuration, ILogger<RenderService> logger)
         {
             _storage = storage;
             _assets = assets;
+            _tenant = tenant;
             _logger = logger;
             _timeoutSeconds = configuration.GetValue("Render:TimeoutSeconds", 60);
             _semaphore ??= new SemaphoreSlim(Math.Max(1, configuration.GetValue("Render:MaxConcurrency", 4)));
@@ -32,6 +35,15 @@ namespace API.CORE.Services
         public async Task<byte[]> RenderPdfAsync(ReportTemplate template, PdfRenderPayload payload)
         {
             var json = BuildDataJson(payload.Document, payload.Societe, payload.Options);
+
+            // Assets fournis dans la requete -> rendu sans etat (aucune lecture du cache memoire).
+            var a = payload.Assets;
+            if (a != null)
+                return await RenderFileAsync(_storage.GetAbsolutePath(template.FilePath), template.SocieteId, json,
+                    template.ConfigJson, template.TableStyle,
+                    overrideAssets: true, logoOverride: a.Logo, cachetOverride: a.Cachet,
+                    backgroundOverride: a.Background, mainColorOverride: a.MainColor);
+
             return await RenderPdfAsync(template, json);
         }
 
@@ -42,7 +54,8 @@ namespace API.CORE.Services
         /// <summary>Rend un .mrt arbitraire (chemin absolu) avec le contexte societe (logo, couleur, style de tableau).</summary>
         public async Task<byte[]> RenderFileAsync(string mrtAbsolutePath, string? societeId, string dataJson, string? configJson, int tableStyle = 0,
             double? logoWidthPx = null, double? logoHeightPx = null, double? cachetWidthPx = null, double? cachetHeightPx = null,
-            bool overrideAssets = false, string? logoOverride = null, string? cachetOverride = null, bool asPng = false)
+            bool overrideAssets = false, string? logoOverride = null, string? cachetOverride = null, bool asPng = false,
+            string? backgroundOverride = null, string? mainColorOverride = null)
         {
             await _semaphore!.WaitAsync(TimeSpan.FromSeconds(_timeoutSeconds));
             try
@@ -55,16 +68,35 @@ namespace API.CORE.Services
                 // adresse intervention) construits dans les donnees selon la config.
                 var styledData = DataStyler.AddDesignationHtml(dataJson, configJson);
                 styledData = DiversStyler.Apply(styledData, configJson);
+                // Vignette article : telecharge les URL d'images cote serveur et les convertit en base64.
+                styledData = await VignetteResolver.ResolveAsync(styledData);
+                // Titre / sous-titre configures (« Divers > Textes ») + resolution des tags #reference/#type/#compteur.
+                styledData = TextsStyler.Apply(styledData, configJson);
                 RegisterData(report, styledData);
-                _assets.Apply(report, societeId);
-                // Apercu : le logo/cachet de la societe CONNECTEE viennent de la requete et remplacent le cache
-                // (evite d'afficher le logo d'une societe precedente ; null = pas de logo pour cette societe).
-                if (overrideAssets) SocieteAssetsService.ApplyAssets(report, logoOverride, cachetOverride);
+
+                // Assets (logo, cachet, papier entete, couleur). Cible du refactor « microservice neutre » :
+                //  - overrideAssets=true  -> tout vient de la REQUETE (logo/cachet/fond/couleur en base64/hex) ;
+                //                            le rendu ne depend d'AUCUN etat serveur.
+                //  - overrideAssets=false -> repli sur le cache memoire par societe (encore utilise par le
+                //                            designer ; sera retire en Phase 3).
+                string? mainColor;
+                if (overrideAssets)
+                {
+                    SocieteAssetsService.ApplyAssets(report, logoOverride, cachetOverride);
+                    SocieteAssetsService.ApplyBackground(report, backgroundOverride);
+                    mainColor = mainColorOverride;
+                }
+                else
+                {
+                    var assetSocieteId = string.IsNullOrWhiteSpace(_tenant.SocieteId) ? societeId : _tenant.SocieteId;
+                    _assets.Apply(report, assetSocieteId);
+                    mainColor = _assets.Get(assetSocieteId)?.MainColor;
+                }
                 // Dimensions logo/cachet (px, config du template) : redimensionnent les boites apres les avoir alimentees.
                 SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.LogoComponentName, logoWidthPx, logoHeightPx);
                 SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.CachetComponentName, cachetWidthPx, cachetHeightPx);
-                // Couleur : config explicite, sinon couleur societe stockee (BDD).
-                PdfConfigApplier.Apply(report, configJson, _assets.Get(societeId)?.MainColor);
+                // Couleur : config explicite, sinon couleur societe (requete en override, sinon cache).
+                PdfConfigApplier.Apply(report, configJson, mainColor);
                 // Visibilite des colonnes du tableau (config `cols`) : masque + recompacte avant le style de tableau.
                 ColumnsApplier.Apply(report, configJson);
                 // Options « Divers » : normalise les bindings identite client vers les variables calculees,

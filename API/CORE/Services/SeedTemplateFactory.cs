@@ -103,12 +103,16 @@ namespace API.CORE.Services
             });
 
             // Boites Devis N° / Date / Client (haut droite)
-            AddQuoteInfoBox(band, 11.0, 0.5, "Devis N°", "{document.reference}");
-            AddQuoteInfoBox(band, 13.7, 0.5, "Date", "{document.dateCreation}", isDate: true);
-            AddQuoteInfoBox(band, 16.4, 0.5, "Client", "{client.nom}");
+            AddQuoteInfoBox(band, 10.0, 0.5, "Devis N°", "{document.reference}");
+            AddQuoteInfoBox(band, 13.05, 0.5, "Date", "{document.dateCreation}", isDate: true);
+            AddQuoteInfoBox(band, 16.1, 0.5, "Client", "{client.nom}");
 
-            // Titre centre
-            band.Components.Add(Txt(0, 2.6, W, 0.9, "{document.titre}", 21, bold: true, align: StiTextHorAlignment.Center, color: Dark));
+            // Titre centre (pilote par la config « Divers > Textes », tags #reference/#type/#compteur resolus)
+            band.Components.Add(Txt(0, 2.55, W, 0.8, "{options.titreDocument}", 21, bold: true, align: StiTextHorAlignment.Center, color: Dark));
+            // Sous-titre / avenant (vide -> ligne collabee via CanShrink)
+            var sousTitre7 = Txt(0, 3.35, W, 0.5, "{options.sousTitreDocument}", 11, align: StiTextHorAlignment.Center, color: Dark);
+            sousTitre7.CanShrink = true;
+            band.Components.Add(sousTitre7);
 
             // Bloc societe (gauche)
             band.Components.Add(Txt(0, 3.9, 8.0, 2.2,
@@ -141,8 +145,10 @@ namespace API.CORE.Services
         {
             var band = new StiReportTitleBand { Name = "Entete", Height = 5.6, CanShrink = false };
             AddLabeledBlock(band, 0, 1.8, 8.0, "Devis", "Date de création : " + DateCreation + "\nFin validité : " + DateValidite);
-            AddLabeledBlock(band, 10.5, 1.8, 8.0, "{client.blocClient}", "");
-            AddLabeledBlock(band, 10.5, 3.4, 8.0, "{client.adresseInter}", "");
+            // Bloc client + adresse : texte multi-lignes (hauteur suffisante) — un AddLabeledBlock mettait le
+            // contenu dans un slot « label » de 0,5 cm et tronquait TVA/SIRET/adresse.
+            band.Components.Add(Txt(10.5, 1.8, 8.0, 1.6, "{client.blocClient}", 8.5f, color: Dark));
+            band.Components.Add(Txt(10.5, 3.5, 8.0, 1.0, "{client.adresseInter}", 8.5f, color: Dark));
             band.Components.Add(Txt(0, 5.0, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
             return band;
         }
@@ -152,8 +158,9 @@ namespace API.CORE.Services
         {
             var band = new StiReportTitleBand { Name = "Entete", Height = 6.0, CanShrink = false };
             AddLabeledBlock(band, 10.5, 1.2, 8.0, "Devis", "Date de création : " + DateCreation + "\nFin validité : " + DateValidite);
-            AddLabeledBlock(band, 10.5, 2.8, 8.0, "{client.blocClient}", "");
-            AddLabeledBlock(band, 10.5, 4.2, 8.0, "{client.adresseInter}", "");
+            // Bloc client + adresse : texte multi-lignes (hauteur suffisante) — cf. modele 5.
+            band.Components.Add(Txt(10.5, 2.6, 8.0, 1.6, "{client.blocClient}", 8.5f, color: Dark));
+            band.Components.Add(Txt(10.5, 4.3, 8.0, 1.0, "{client.adresseInter}", 8.5f, color: Dark));
             band.Components.Add(Txt(0, 5.5, W, 0.5, "{client.affaire}", 9, bold: true, color: Dark));
             return band;
         }
@@ -234,15 +241,17 @@ namespace API.CORE.Services
 
         private static void AddQuoteInfoBox(StiBand band, double x, double y, string label, string expr, bool isDate = false)
         {
-            const double w = 2.5;
+            const double w = 2.9;
             var head = Txt(x, y, w, 0.45, label, 8, bold: true, color: Color.White, align: StiTextHorAlignment.Center);
             head.Brush = new StiSolidBrush(Accent);
             band.Components.Add(head);
 
             var value = isDate
                 ? DateValue(x, y + 0.45, w, expr, StiTextHorAlignment.Center)
-                : Txt(x, y + 0.45, w, 0.5, expr, 8, align: StiTextHorAlignment.Center, color: Dark);
+                : Txt(x, y + 0.45, w, 0.5, expr, 7.5f, align: StiTextHorAlignment.Center, color: Dark);
             value.Height = 0.5;
+            value.CanGrow = true;   // s'agrandit verticalement pour ne pas tronquer references/noms longs
+            value.WordWrap = true;
             value.Border = new StiBorder(StiBorderSides.All, Color.Silver, 1, StiPenStyle.Solid);
             band.Components.Add(value);
         }

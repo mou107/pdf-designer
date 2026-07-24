@@ -83,6 +83,20 @@ namespace API.CORE.Services
             SetComponentImage(report, CachetComponentName, cachetBase64);
         }
 
+        /// <summary>Pose l'image de fond (papier entete) en filigrane plein page a partir d'un base64 de la requete
+        /// — pour un rendu SANS ETAT (le fond ne vient plus du cache memoire). null/vide => ne fait rien.</summary>
+        public static void ApplyBackground(StiReport report, string? base64)
+        {
+            var image = LoadImage(base64);
+            if (image == null) return;
+            foreach (StiPage page in report.Pages)
+            {
+                page.Watermark.Image = image;
+                page.Watermark.ImageStretch = true;
+                page.Watermark.ImageTransparency = 0;
+            }
+        }
+
         private static void SetComponentImage(StiReport report, string componentName, string? base64)
         {
             if (report.GetComponentByName(componentName) is not StiImage img) return;

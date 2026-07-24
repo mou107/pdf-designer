@@ -9,7 +9,9 @@ namespace API.CORE.Extensions
             app.UseCors(builder =>
             {
                 if (origins.Length > 0)
-                    builder.WithOrigins(origins);
+                    builder.SetIsOriginAllowed(origin =>
+                        origins.Contains(origin, StringComparer.OrdinalIgnoreCase)
+                        || (app.Environment.IsDevelopment() && Uri.TryCreate(origin, UriKind.Absolute, out var uri) && uri.IsLoopback));
                 else
                     builder.SetIsOriginAllowed(_ => true);
 

@@ -35,14 +35,21 @@ namespace API.CONTROLLERS
             if (string.IsNullOrWhiteSpace(_tenant.SocieteId))
                 return BadRequest(new { error = "Societe non resolue." });
 
+            // Fusion PARTIELLE : null/absent = conserver l'existant ; "" = effacer ; valeur = definir.
+            // Sinon les pushs logo/couleur (qui envoient background:null) effaceraient le papier entete
+            // deja pousse par l'utilisateur (le store etant en memoire, tout objet remplace ecrase le fond).
+            var existing = _assets.Get(_tenant.SocieteId) ?? new SocieteAssets();
             _assets.Set(_tenant.SocieteId, new SocieteAssets
             {
-                Logo = request.Logo,
-                Background = request.Background,
-                Cachet = request.Cachet,
-                MainColor = request.MainColor
+                Logo = Merge(existing.Logo, request.Logo),
+                Background = Merge(existing.Background, request.Background),
+                Cachet = Merge(existing.Cachet, request.Cachet),
+                MainColor = Merge(existing.MainColor, request.MainColor)
             });
             return Ok();
+
+            static string? Merge(string? current, string? incoming)
+                => incoming is null ? current : (incoming.Length == 0 ? null : incoming);
         }
 
         [HttpGet]

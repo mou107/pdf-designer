@@ -79,9 +79,18 @@ namespace API.CONTROLLERS
         [HttpPut("{id}/default")]
         public async Task<IActionResult> SetDefault(string id)
         {
-            var template = await _templates.FindOwnedAsync(id);
+            // Readable = modele de la societe OU seed global : une societe peut definir par defaut
+            // un des 7 modeles standards sans le dupliquer.
+            var template = await _templates.FindReadableAsync(id);
             if (template == null) return NotFound();
-            await _templates.SetDefaultAsync(template);
+            try
+            {
+                await _templates.SetDefaultAsync(template);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
             return Ok();
         }
 

@@ -59,6 +59,10 @@ namespace API.CONTROLLERS
             public bool OverrideAssets { get; set; }
             public string? Logo { get; set; }
             public string? Cachet { get; set; }
+            /// <summary>Papier entete (fond, base64) + couleur principale de la societe CONNECTEE — appliques en
+            /// override pour un apercu sans etat (plus de dependance au cache memoire du microservice).</summary>
+            public string? Background { get; set; }
+            public string? MainColor { get; set; }
         }
 
         /// <summary>Preversion d'un modele avec les donnees exemples du docType + la config societe (couleurs, logo…).</summary>
@@ -95,7 +99,8 @@ namespace API.CONTROLLERS
             var tableStyle = request?.TableStyle ?? template.TableStyle;
             var pdf = await _render.RenderFileAsync(mrtPath, template.SocieteId, sampleJson, request?.ConfigJson, tableStyle,
                 request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight,
-                request?.OverrideAssets == true, request?.Logo, request?.Cachet, png);
+                request?.OverrideAssets == true, request?.Logo, request?.Cachet, png,
+                backgroundOverride: request?.Background, mainColorOverride: request?.MainColor);
             return File(pdf, png ? "image/png" : "application/pdf", png ? $"preview-{template.DocType}.png" : $"preview-{template.DocType}.pdf");
         }
     }

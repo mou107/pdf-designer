@@ -9,6 +9,7 @@ namespace API.DATABASE
 
         public DbSet<ReportTemplate> ReportTemplates => Set<ReportTemplate>();
         public DbSet<ReportTemplateVersion> ReportTemplateVersions => Set<ReportTemplateVersion>();
+        public DbSet<SocieteDefaultTemplate> SocieteDefaultTemplates => Set<SocieteDefaultTemplate>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -19,6 +20,11 @@ namespace API.DATABASE
 
             modelBuilder.Entity<ReportTemplateVersion>()
                 .HasIndex(v => v.TemplateId);
+
+            // Un seul modele par defaut par (societe, type de document).
+            modelBuilder.Entity<SocieteDefaultTemplate>()
+                .HasIndex(d => new { d.SocieteId, d.DocType })
+                .IsUnique();
         }
     }
 }
