@@ -82,7 +82,10 @@ namespace API.CONTROLLERS
             // les assets pousses sous _tenant.SocieteId (dont le papier entete) sont introuvables ici —
             // notamment pour un seed (SocieteId null) — et le fond n'apparait pas dans le designer.
             var assetSocieteId = string.IsNullOrWhiteSpace(_tenant.SocieteId) ? template.SocieteId : _tenant.SocieteId;
-            _assets.Apply(report, assetSocieteId);
+            // Papier entete (filigrane plein page) : reserve aux modeles sobres 5 et 6 (et leurs copies societe,
+            // qui heritent du numero de modele). Les autres modeles ont leur propre bande d'entete et ne doivent
+            // pas porter le papier entete — ni a l'affichage du designer, ni dans le .mrt sauvegarde.
+            _assets.Apply(report, assetSocieteId, applyBackground: template.Model is 5 or 6);
             PdfConfigApplier.Apply(report, template.ConfigJson, _assets.Get(assetSocieteId)?.MainColor);
             ColumnsApplier.Apply(report, template.ConfigJson);
             TableStyleApplier.Apply(report, template.TableStyle);

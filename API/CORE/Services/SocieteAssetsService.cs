@@ -38,8 +38,10 @@ namespace API.CORE.Services
         public SocieteAssets? Get(string? societeId)
             => societeId != null && _assets.TryGetValue(societeId, out var a) ? a : null;
 
-        /// <summary>Applique logo + fond de la societe au rapport charge (avant render / avant designer).</summary>
-        public void Apply(StiReport report, string? societeId)
+        /// <summary>Applique logo + fond de la societe au rapport charge (avant render / avant designer).
+        /// <paramref name="applyBackground"/> : le papier entete (filigrane plein page) n'a de sens que pour
+        /// les modeles sobres 5 et 6 ; passer false pour ne pas le poser sur les autres modeles.</summary>
+        public void Apply(StiReport report, string? societeId, bool applyBackground = true)
         {
             var assets = Get(societeId);
             if (assets == null) return;
@@ -60,7 +62,7 @@ namespace API.CORE.Services
                 cachetImage.AspectRatio = true;
             }
 
-            var background = LoadImage(assets.Background);
+            var background = applyBackground ? LoadImage(assets.Background) : null;
             if (background != null)
             {
                 foreach (StiPage page in report.Pages)

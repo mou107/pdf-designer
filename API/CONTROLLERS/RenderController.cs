@@ -97,10 +97,13 @@ namespace API.CONTROLLERS
             }
 
             var tableStyle = request?.TableStyle ?? template.TableStyle;
+            // Papier entete : uniquement pour les modeles sobres 5 et 6 (celui reellement previsualise).
+            var effectiveModel = request?.Model ?? template.Model;
             var pdf = await _render.RenderFileAsync(mrtPath, template.SocieteId, sampleJson, request?.ConfigJson, tableStyle,
                 request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight,
                 request?.OverrideAssets == true, request?.Logo, request?.Cachet, png,
-                backgroundOverride: request?.Background, mainColorOverride: request?.MainColor);
+                backgroundOverride: request?.Background, mainColorOverride: request?.MainColor,
+                allowBackground: effectiveModel is 5 or 6);
             return File(pdf, png ? "image/png" : "application/pdf", png ? $"preview-{template.DocType}.png" : $"preview-{template.DocType}.pdf");
         }
     }

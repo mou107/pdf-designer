@@ -42,20 +42,22 @@ namespace API.CORE.Services
                 return await RenderFileAsync(_storage.GetAbsolutePath(template.FilePath), template.SocieteId, json,
                     template.ConfigJson, template.TableStyle,
                     overrideAssets: true, logoOverride: a.Logo, cachetOverride: a.Cachet,
-                    backgroundOverride: a.Background, mainColorOverride: a.MainColor);
+                    backgroundOverride: a.Background, mainColorOverride: a.MainColor,
+                    allowBackground: template.Model is 5 or 6);
 
             return await RenderPdfAsync(template, json);
         }
 
         /// <param name="configOverride">Config simple (JSON) a appliquer ; a defaut, celle du template.</param>
         public Task<byte[]> RenderPdfAsync(ReportTemplate template, string dataJson, string? configOverride = null)
-            => RenderFileAsync(_storage.GetAbsolutePath(template.FilePath), template.SocieteId, dataJson, configOverride ?? template.ConfigJson, template.TableStyle);
+            => RenderFileAsync(_storage.GetAbsolutePath(template.FilePath), template.SocieteId, dataJson, configOverride ?? template.ConfigJson, template.TableStyle,
+                allowBackground: template.Model is 5 or 6);
 
         /// <summary>Rend un .mrt arbitraire (chemin absolu) avec le contexte societe (logo, couleur, style de tableau).</summary>
         public async Task<byte[]> RenderFileAsync(string mrtAbsolutePath, string? societeId, string dataJson, string? configJson, int tableStyle = 0,
             double? logoWidthPx = null, double? logoHeightPx = null, double? cachetWidthPx = null, double? cachetHeightPx = null,
             bool overrideAssets = false, string? logoOverride = null, string? cachetOverride = null, bool asPng = false,
-            string? backgroundOverride = null, string? mainColorOverride = null)
+            string? backgroundOverride = null, string? mainColorOverride = null, bool allowBackground = true)
         {
             await _semaphore!.WaitAsync(TimeSpan.FromSeconds(_timeoutSeconds));
             try
@@ -79,17 +81,18 @@ namespace API.CORE.Services
                 //                            le rendu ne depend d'AUCUN etat serveur.
                 //  - overrideAssets=false -> repli sur le cache memoire par societe (encore utilise par le
                 //                            designer ; sera retire en Phase 3).
+                // Papier entete (filigrane plein page) : reserve aux modeles sobres 5 et 6 (allowBackground).
                 string? mainColor;
                 if (overrideAssets)
                 {
                     SocieteAssetsService.ApplyAssets(report, logoOverride, cachetOverride);
-                    SocieteAssetsService.ApplyBackground(report, backgroundOverride);
+                    SocieteAssetsService.ApplyBackground(report, allowBackground ? backgroundOverride : null);
                     mainColor = mainColorOverride;
                 }
                 else
                 {
                     var assetSocieteId = string.IsNullOrWhiteSpace(_tenant.SocieteId) ? societeId : _tenant.SocieteId;
-                    _assets.Apply(report, assetSocieteId);
+                    _assets.Apply(report, assetSocieteId, applyBackground: allowBackground);
                     mainColor = _assets.Get(assetSocieteId)?.MainColor;
                 }
                 // Dimensions logo/cachet (px, config du template) : redimensionnent les boites apres les avoir alimentees.
