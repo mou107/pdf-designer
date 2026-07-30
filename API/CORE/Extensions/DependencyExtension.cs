@@ -1,4 +1,3 @@
-using API.CORE.Middlewares;
 using API.CORE.Services;
 
 namespace API.CORE.Extensions
@@ -7,20 +6,10 @@ namespace API.CORE.Extensions
     {
         internal static WebApplicationBuilder AddScopedServices(this WebApplicationBuilder builder)
         {
-            builder.Services.AddScoped<TenantContext>();
-            builder.Services.AddScoped<TemplateService>();
             builder.Services.AddScoped<RenderService>();
-            builder.Services.AddSingleton<TemplateStorageService>();
-            builder.Services.AddSingleton<SocieteAssetsService>();
-            builder.Services.AddScoped<SeedService>();
-            builder.Services.AddMemoryCache();
+            // Pont du designer uniquement : le rendu, lui, ne parle a personne.
+            builder.Services.AddHttpClient<TemplateStoreClient>();
             return builder;
-        }
-
-        internal static WebApplication UseMiddlewares(this WebApplication app)
-        {
-            app.UseMiddleware<TenantMiddleware>();
-            return app;
         }
     }
 }

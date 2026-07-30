@@ -1,30 +1,14 @@
+# Le moteur de rendu est sans etat : ni base de donnees, ni volume de templates.
+# Les modeles vivent dans la base Axiobat (table pdf_template) et arrivent dans la requete de rendu.
 services:
-  pdf-designer-db:
-    image: mariadb:10.11
-    environment:
-      MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: pdf_designer
-    ports:
-      - "3307:3306"
-    volumes:
-      - pdf_designer_db:/var/lib/mysql
-
   pdf-designer-api:
     build: .
-    depends_on:
-      - pdf-designer-db
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Default: "Server=pdf-designer-db;Database=pdf_designer;User=root;Password=root;Port=3306"
-      Storage__TemplatesRoot: /data/pdf-designer
       Stimulsoft__LicenseKey: "${STIMULSOFT_LICENSE_KEY:-}"
       Auth__Enabled: "true"
       Auth__SecretKey: "${AXIOBAT_JWT_SECRET:-}"
+      # Uniquement pour le pont du designer (chargement/sauvegarde du .mrt) — le rendu n'appelle personne.
+      Axiobat__ApiBaseUrl: "${AXIOBAT_API_BASE_URL:-}"
     ports:
       - "5290:8080"
-    volumes:
-      - pdf_designer_templates:/data/pdf-designer
-
-volumes:
-  pdf_designer_db:
-  pdf_designer_templates:

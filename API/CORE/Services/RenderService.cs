@@ -1,133 +1,94 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Nodes;
-using API.CORE.Middlewares;
 using API.CORE.Schemas;
-using API.DATABASE.Entities;
+using API.CORE.Services.Report;
 using Stimulsoft.Base;
 using Stimulsoft.Report;
 
 namespace API.CORE.Services
 {
     /// <summary>
-    /// Rendu PDF serveur : template .mrt + donnees JSON -> PDF.
-    /// Limite de concurrence + timeout configurables (Render:MaxConcurrency / Render:TimeoutSeconds).
+    /// Le moteur : un modele .mrt, des donnees, des directives -> un document. Sans etat, sans base,
+    /// sans disque et sans metier — tout arrive dans la requete.
     /// </summary>
+    /// <remarks>
+    /// Limite de concurrence et delai d'attente configurables
+    /// (<c>Render:MaxConcurrency</c> / <c>Render:TimeoutSeconds</c>) : un rendu Stimulsoft est couteux en
+    /// memoire, les laisser tous partir en meme temps ferait tomber le service.
+    /// </remarks>
     public class RenderService
     {
         private static SemaphoreSlim? _semaphore;
-        private readonly TemplateStorageService _storage;
-        private readonly SocieteAssetsService _assets;
-        private readonly TenantContext _tenant;
         private readonly ILogger<RenderService> _logger;
         private readonly int _timeoutSeconds;
 
-        public RenderService(TemplateStorageService storage, SocieteAssetsService assets, TenantContext tenant, IConfiguration configuration, ILogger<RenderService> logger)
+        public RenderService(IConfiguration configuration, ILogger<RenderService> logger)
         {
-            _storage = storage;
-            _assets = assets;
-            _tenant = tenant;
             _logger = logger;
             _timeoutSeconds = configuration.GetValue("Render:TimeoutSeconds", 60);
             _semaphore ??= new SemaphoreSlim(Math.Max(1, configuration.GetValue("Render:MaxConcurrency", 4)));
         }
 
-        public async Task<byte[]> RenderPdfAsync(ReportTemplate template, PdfRenderPayload payload)
+        /// <summary>Format de sortie demande.</summary>
+        public enum OutputFormat
         {
-            var json = BuildDataJson(payload.Document, payload.Societe, payload.Options);
-
-            // Assets fournis dans la requete -> rendu sans etat (aucune lecture du cache memoire).
-            var a = payload.Assets;
-            if (a != null)
-                return await RenderFileAsync(_storage.GetAbsolutePath(template.FilePath), template.SocieteId, json,
-                    template.ConfigJson, template.TableStyle,
-                    overrideAssets: true, logoOverride: a.Logo, cachetOverride: a.Cachet,
-                    backgroundOverride: a.Background, mainColorOverride: a.MainColor,
-                    allowBackground: template.Model is 5 or 6);
-
-            return await RenderPdfAsync(template, json);
+            Pdf,
+            Png
         }
 
-        /// <param name="configOverride">Config simple (JSON) a appliquer ; a defaut, celle du template.</param>
-        public Task<byte[]> RenderPdfAsync(ReportTemplate template, string dataJson, string? configOverride = null)
-            => RenderFileAsync(_storage.GetAbsolutePath(template.FilePath), template.SocieteId, dataJson, configOverride ?? template.ConfigJson, template.TableStyle,
-                allowBackground: template.Model is 5 or 6);
-
-        /// <summary>Rend un .mrt arbitraire (chemin absolu) avec le contexte societe (logo, couleur, style de tableau).</summary>
-        public async Task<byte[]> RenderFileAsync(string mrtAbsolutePath, string? societeId, string dataJson, string? configJson, int tableStyle = 0,
-            double? logoWidthPx = null, double? logoHeightPx = null, double? cachetWidthPx = null, double? cachetHeightPx = null,
-            bool overrideAssets = false, string? logoOverride = null, string? cachetOverride = null, bool asPng = false,
-            string? backgroundOverride = null, string? mainColorOverride = null, bool allowBackground = true)
+        /// <summary>
+        /// Rend la requete et renvoie le document produit.
+        /// </summary>
+        /// <remarks>
+        /// L'application des directives est deleguee a <see cref="DirectiveApplier"/>, partage avec le
+        /// pont du designer : ce que l'utilisateur edite ressemble ainsi a ce qui sera imprime.
+        /// </remarks>
+        public async Task<byte[]> RenderAsync(RenderRequest request, OutputFormat format = OutputFormat.Pdf)
         {
+            if (string.IsNullOrWhiteSpace(request.Mrt))
+                throw new ArgumentException("Le contenu du modele (mrt) est requis.", nameof(request));
+
             await _semaphore!.WaitAsync(TimeSpan.FromSeconds(_timeoutSeconds));
             try
             {
                 var stopwatch = Stopwatch.StartNew();
+
                 var report = StiReport.CreateNewReport();
-                report.Load(mrtAbsolutePath);
+                report.LoadFromString(request.Mrt);
 
-                // Styles de texte par type de ligne (designationHtml) + options « Divers » (bloc client, affaire,
-                // adresse intervention) construits dans les donnees selon la config.
-                var styledData = DataStyler.AddDesignationHtml(dataJson, configJson);
-                styledData = DiversStyler.Apply(styledData, configJson);
-                // Vignette article : telecharge les URL d'images cote serveur et les convertit en base64.
-                styledData = await VignetteResolver.ResolveAsync(styledData);
-                // Titre / sous-titre configures (« Divers > Textes ») + resolution des tags #reference/#type/#compteur.
-                styledData = TextsStyler.Apply(styledData, configJson);
-                RegisterData(report, styledData);
-
-                // Assets (logo, cachet, papier entete, couleur). Cible du refactor « microservice neutre » :
-                //  - overrideAssets=true  -> tout vient de la REQUETE (logo/cachet/fond/couleur en base64/hex) ;
-                //                            le rendu ne depend d'AUCUN etat serveur.
-                //  - overrideAssets=false -> repli sur le cache memoire par societe (encore utilise par le
-                //                            designer ; sera retire en Phase 3).
-                // Papier entete (filigrane plein page) : reserve aux modeles sobres 5 et 6 (allowBackground).
-                string? mainColor;
-                if (overrideAssets)
-                {
-                    SocieteAssetsService.ApplyAssets(report, logoOverride, cachetOverride);
-                    SocieteAssetsService.ApplyBackground(report, allowBackground ? backgroundOverride : null);
-                    mainColor = mainColorOverride;
-                }
-                else
-                {
-                    var assetSocieteId = string.IsNullOrWhiteSpace(_tenant.SocieteId) ? societeId : _tenant.SocieteId;
-                    _assets.Apply(report, assetSocieteId, applyBackground: allowBackground);
-                    mainColor = _assets.Get(assetSocieteId)?.MainColor;
-                }
-                // Dimensions logo/cachet (px, config du template) : redimensionnent les boites apres les avoir alimentees.
-                SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.LogoComponentName, logoWidthPx, logoHeightPx);
-                SocieteAssetsService.ApplyImageDimensions(report, SocieteAssetsService.CachetComponentName, cachetWidthPx, cachetHeightPx);
-                // Couleur : config explicite, sinon couleur societe (requete en override, sinon cache).
-                PdfConfigApplier.Apply(report, configJson, mainColor);
-                // Visibilite des colonnes du tableau (config `cols`) : masque + recompacte avant le style de tableau.
-                ColumnsApplier.Apply(report, configJson);
-                // Options « Divers » : normalise les bindings identite client vers les variables calculees,
-                // pour que Divers pilote le bloc client meme sur un .mrt personnalise dans l'editeur avance.
-                DiversApplier.Apply(report);
-                TableStyleApplier.Apply(report, tableStyle);
+                RegisterData(report, request.Data, request.DataSetName);
+                DirectiveApplier.Apply(report, request, includeImages: true);
 
                 report.Render(false);
 
                 using var stream = new MemoryStream();
-                if (asPng) // DIAG : export image pour inspection visuelle.
+                if (format == OutputFormat.Png)
                 {
-                    var img = new Stimulsoft.Report.Export.StiImageExportSettings
-                    {
-                        ImageResolution = 120,
-                        PageRange = new Stimulsoft.Report.StiPagesRange(1)
-                    };
-                    report.ExportDocument(StiExportFormat.ImagePng, stream, img);
+                    // Export image : inspection visuelle d'un rendu, limitee a la premiere page.
+                    // StiPngExportSettings et non StiImageExportSettings : ce dernier produit du JPEG,
+                    // ce qui contredirait le Content-Type annonce.
+                    report.ExportDocument(StiExportFormat.ImagePng, stream,
+                        new Stimulsoft.Report.Export.StiPngExportSettings
+                        {
+                            ImageResolution = 120,
+                            PageRange = new StiPagesRange(1)
+                        });
                 }
                 else
                 {
                     report.ExportDocument(StiExportFormat.Pdf, stream);
                 }
 
-                _logger.LogInformation("Rendu PDF societe={SocieteId} en {Elapsed}ms ({Size} octets)",
-                    societeId, stopwatch.ElapsedMilliseconds, stream.Length);
+                _logger.LogInformation("Rendu {Format} en {Elapsed}ms ({Size} octets)",
+                    format, stopwatch.ElapsedMilliseconds, stream.Length);
 
-                return stream.ToArray();
+                var output = stream.ToArray();
+
+                // Les documents joints sont concatenes au PDF produit. Sans objet en export image, qui ne
+                // rend que la premiere page.
+                return format == OutputFormat.Png
+                    ? output
+                    : AttachmentsMerger.Append(output, request.Attachments, _logger);
             }
             finally
             {
@@ -135,64 +96,25 @@ namespace API.CORE.Services
             }
         }
 
-        /// <summary>Remplace l'identite societe des donnees d'exemple par la vraie identite (config Axiobat).</summary>
-        public static string MergeSociete(string dataJson, string? societeJson)
+        /// <summary>
+        /// Enregistre les donnees de la requete comme source du rapport, telles quelles.
+        /// </summary>
+        /// <remarks>
+        /// Aucune forme n'est imposee : le moteur ne lit pas ces donnees, il les met a disposition des
+        /// expressions du modele. C'est ce qui lui permet de servir des applications aux modeles de
+        /// donnees totalement differents.
+        /// </remarks>
+        private static void RegisterData(StiReport report, JsonElement? data, string? dataSetName)
         {
-            if (string.IsNullOrWhiteSpace(societeJson)) return dataJson;
-            try
-            {
-                var root = JsonNode.Parse(dataJson)!.AsObject();
-                var over = JsonNode.Parse(societeJson)!.AsObject();
-                var societe = root["societe"]?.AsObject() ?? new JsonObject();
-                foreach (var kv in over)
-                {
-                    if (kv.Value is null) continue;
-                    var s = kv.Value.ToJsonString();
-                    if (s == "\"\"" || s == "null") continue; // ignore vides
-                    societe[kv.Key] = JsonNode.Parse(s);
-                }
-                root["societe"] = societe;
-                return root.ToJsonString();
-            }
-            catch { return dataJson; }
-        }
+            var name = string.IsNullOrWhiteSpace(dataSetName) ? "data" : dataSetName;
+            var json = data.HasValue && data.Value.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Null)
+                ? data.Value.GetRawText()
+                : "{}";
 
-        /// <summary>Injecte le JSON dans le dictionnaire du rapport (dataset "data").</summary>
-        public static void RegisterData(StiReport report, string dataJson)
-        {
-            var dataSet = StiJsonToDataSetConverter.GetDataSet(dataJson);
-            dataSet.DataSetName = "data";
-            report.RegData("data", dataSet);
+            var dataSet = StiJsonToDataSetConverter.GetDataSet(json);
+            dataSet.DataSetName = name;
+            report.RegData(name, dataSet);
             report.Dictionary.Synchronize();
-        }
-
-        /// <summary>Fusionne document/societe/options dans un objet JSON unique conforme au dictionnaire des .mrt.</summary>
-        public static string BuildDataJson(JsonElement? document, JsonElement? societe, JsonElement? options)
-        {
-            using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream))
-            {
-                writer.WriteStartObject();
-                writer.WritePropertyName("document");
-                WriteElementOrEmpty(writer, document);
-                writer.WritePropertyName("societe");
-                WriteElementOrEmpty(writer, societe);
-                writer.WritePropertyName("options");
-                WriteElementOrEmpty(writer, options);
-                writer.WriteEndObject();
-            }
-            return System.Text.Encoding.UTF8.GetString(stream.ToArray());
-        }
-
-        private static void WriteElementOrEmpty(Utf8JsonWriter writer, JsonElement? element)
-        {
-            if (element.HasValue && element.Value.ValueKind != JsonValueKind.Undefined && element.Value.ValueKind != JsonValueKind.Null)
-                element.Value.WriteTo(writer);
-            else
-            {
-                writer.WriteStartObject();
-                writer.WriteEndObject();
-            }
         }
     }
 }

@@ -4,107 +4,48 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace API.CONTROLLERS
 {
+    /// <summary>
+    /// Le seul endpoint metier du moteur : un modele, des donnees, des directives -> un document.
+    /// </summary>
+    /// <remarks>
+    /// Rien n'est resolu ici. L'appelant fournit le <c>.mrt</c>, ses donnees et la liste de ce qu'il veut
+    /// appliquer dessus ; le moteur ne connait ni modele stocke, ni societe, ni type de document, ni
+    /// aucun nom de champ. C'est ce qui le rend utilisable par n'importe quel projet.
+    /// </remarks>
     [ApiController]
     [Route("api/render")]
     public class RenderController : ControllerBase
     {
-        private readonly TemplateService _templates;
         private readonly RenderService _render;
 
-        public RenderController(TemplateService templates, RenderService render, ILogger<RenderController> logger)
+        public RenderController(RenderService render)
         {
-            _templates = templates;
             _render = render;
-            _logger = logger;
         }
 
         /// <summary>
-        /// Rendu d'un document : PdfRenderPayload (JSON complet envoye par le client web/mobile) -> PDF.
-        /// Resolution du template : templateId explicite -> defaut (societe, docType) -> seed global.
+        /// Rend un document.
         /// </summary>
+        /// <param name="request">le modele, les donnees et les directives</param>
+        /// <param name="format">
+        /// <c>pdf</c> (defaut) ou <c>png</c>. L'export image ne rend que la premiere page et ignore les
+        /// documents joints : il sert a inspecter visuellement un rendu.
+        /// </param>
         [HttpPost]
-        public async Task<IActionResult> Render([FromBody] PdfRenderPayload payload)
+        [Produces("application/pdf", "image/png")]
+        public async Task<IActionResult> Render([FromBody] RenderRequest request, [FromQuery] string? format = null)
         {
-            if (!DocTypes.IsValid(payload.DocType))
-                return BadRequest(new { error = $"docType invalide. Valeurs : {string.Join(", ", DocTypes.All)}" });
+            if (string.IsNullOrWhiteSpace(request?.Mrt))
+                return BadRequest(new { error = "mrt est requis : le moteur ne detient aucun modele." });
 
-            var template = await _templates.ResolveForRenderAsync(payload.DocType, payload.TemplateId);
-            if (template == null)
-                return NotFound(new { error = $"Aucun modele disponible pour {payload.DocType}." });
+            var png = string.Equals(format, "png", StringComparison.OrdinalIgnoreCase);
+            var output = await _render.RenderAsync(request,
+                png ? RenderService.OutputFormat.Png : RenderService.OutputFormat.Pdf);
 
-            var pdf = await _render.RenderPdfAsync(template, payload);
-            return File(pdf, "application/pdf", $"{payload.DocType}.pdf");
-        }
-
-        public class PreviewRequest
-        {
-            /// <summary>Donnees du document (JSON { document, societe, options }) fournies par l'appelant (Axiobat)
-            /// pour l'apercu. A defaut, un squelette generique en code est utilise (SampleSkeleton).</summary>
-            public string? DataJson { get; set; }
-            /// <summary>Config simple courante (couleurs/colonnes) pour l'apercu live pendant l'edition — optionnel.</summary>
-            public string? ConfigJson { get; set; }
-            /// <summary>Numero de modele a previsualiser (1-7) — bascule de modele dans l'editeur ; a defaut celui du template.</summary>
-            public int? Model { get; set; }
-            /// <summary>Identite reelle de la societe (nom, adresse, siret, mentions…) pour remplacer les donnees d'exemple.</summary>
-            public string? SocieteJson { get; set; }
-            /// <summary>Style de tableau (1-3) — bordures / lignes alternees.</summary>
-            public int? TableStyle { get; set; }
-            /// <summary>Dimensions du logo / cachet en pixels — redimensionnent leur boite au rendu (0/absent = defaut).</summary>
-            public double? LogoWidth { get; set; }
-            public double? LogoHeight { get; set; }
-            public double? CachetWidth { get; set; }
-            public double? CachetHeight { get; set; }
-            /// <summary>Logo / cachet (base64) de la societe CONNECTEE. Quand OverrideAssets=true, ils remplacent
-            /// l'asset en cache pour l'apercu (null = pas de logo) — garantit que l'apercu reflete la societe courante.</summary>
-            public bool OverrideAssets { get; set; }
-            public string? Logo { get; set; }
-            public string? Cachet { get; set; }
-            /// <summary>Papier entete (fond, base64) + couleur principale de la societe CONNECTEE — appliques en
-            /// override pour un apercu sans etat (plus de dependance au cache memoire du microservice).</summary>
-            public string? Background { get; set; }
-            public string? MainColor { get; set; }
-        }
-
-        /// <summary>Preversion d'un modele avec les donnees exemples du docType + la config societe (couleurs, logo…).</summary>
-        private readonly ILogger<RenderController> _logger;
-
-        [HttpPost("preview")]
-        public async Task<IActionResult> Preview([FromQuery] string templateId, [FromQuery] bool png = false, [FromBody] PreviewRequest? request = null)
-        {
-            var template = await _templates.FindReadableAsync(templateId);
-            if (template == null) return NotFound();
-
-            // Trace de diagnostic : que recoit-on reellement du webadmin ?
-            _logger.LogInformation("PREVIEW model={Model} tableStyle={Table} configLen={Len} societeLen={SocLen} DIAG-SOCIETE={Soc}",
-                request?.Model, request?.TableStyle, request?.ConfigJson?.Length ?? 0,
-                request?.SocieteJson?.Length ?? 0,
-                request?.SocieteJson?.Length > 600 ? request.SocieteJson.Substring(0, 600) : request?.SocieteJson);
-
-            // Donnees d'apercu : fournies par l'appelant (Axiobat) ; a defaut, squelette generique en code.
-            var sampleJson = string.IsNullOrWhiteSpace(request?.DataJson)
-                ? SampleSkeleton.GetJson(template.DocType)
-                : request!.DataJson;
-            // Remplace l'identite societe des donnees par la vraie (config Axiobat) si fournie.
-            sampleJson = RenderService.MergeSociete(sampleJson, request?.SocieteJson);
-
-            // Bascule de modele dans l'editeur : on rend le seed du modele choisi (mise en page 1-7),
-            // avec le logo + la couleur de la societe du template.
-            string mrtPath = _templates.GetAbsolutePath(template);
-            if (request?.Model is int m && m != template.Model)
-            {
-                var seed = await _templates.FindSeedAsync(template.DocType, m);
-                if (seed != null) mrtPath = _templates.GetAbsolutePath(seed);
-            }
-
-            var tableStyle = request?.TableStyle ?? template.TableStyle;
-            // Papier entete : uniquement pour les modeles sobres 5 et 6 (celui reellement previsualise).
-            var effectiveModel = request?.Model ?? template.Model;
-            var pdf = await _render.RenderFileAsync(mrtPath, template.SocieteId, sampleJson, request?.ConfigJson, tableStyle,
-                request?.LogoWidth, request?.LogoHeight, request?.CachetWidth, request?.CachetHeight,
-                request?.OverrideAssets == true, request?.Logo, request?.Cachet, png,
-                backgroundOverride: request?.Background, mainColorOverride: request?.MainColor,
-                allowBackground: effectiveModel is 5 or 6);
-            return File(pdf, png ? "image/png" : "application/pdf", png ? $"preview-{template.DocType}.png" : $"preview-{template.DocType}.pdf");
+            var fileName = string.IsNullOrWhiteSpace(request.FileName) ? "document" : request.FileName;
+            return png
+                ? File(output, "image/png", $"{fileName}.png")
+                : File(output, "application/pdf", $"{fileName}.pdf");
         }
     }
 }

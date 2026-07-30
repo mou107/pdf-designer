@@ -7,10 +7,23 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Les appliers sont internes : ils n'ont de sens que dans le moteur, mais doivent etre testables. -->
+    <InternalsVisibleTo Include="API.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Traductions de l'interface du designer web. Elles ne sont PAS livrees avec les paquets NuGet
+      Stimulsoft : le fichier vient de https://github.com/stimulsoft/Stimulsoft.Reports.Localization
+      et doit se trouver a cote du binaire, car StiAngularDesignerOptions.Localization resout son
+      chemin depuis le repertoire de l'application.
+    -->
+    <None Update="Localization\*.xml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.11" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
     <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
     <PackageReference Include="Stimulsoft.Reports.Angular.NetCore" Version="2026.2.4" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.7.3" />

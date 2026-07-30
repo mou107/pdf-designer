@@ -8,10 +8,11 @@ namespace API.CORE.Extensions
     internal static class AuthExtension
     {
         /// <summary>
-        /// Valide le JWT Axiobat existant (issuer/audience InovaSquad.com, cle HMAC partagee).
-        /// Le designer Stimulsoft ne pose pas de header Authorization : le jeton est aussi
-        /// accepte en query string (?access_token=) via OnMessageReceived.
-        /// Desactivable en dev (Auth:Enabled=false) pour tester depuis le sandbox sans login Axiobat.
+        /// Valide le JWT de l'application appelante (issuer, audience et cle HMAC partagee, tous
+        /// configures). Le moteur n'emet aucun jeton : il fait confiance a celui qu'il recoit.
+        /// Le designer Stimulsoft ne pose pas de header Authorization : le jeton est aussi accepte en
+        /// query string (?access_token=) via OnMessageReceived.
+        /// Desactivable en dev (Auth:Enabled=false) pour tester sans authentification.
         /// </summary>
         internal static WebApplicationBuilder AddJwtAuth(this WebApplicationBuilder builder)
         {
